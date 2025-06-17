@@ -1,0 +1,19 @@
+{
+  "properties": [
+    {
+      "name": "app.storage.base-dir",
+      "type": "java.lang.String",
+      "description": "A description for 'app.storage.base-dir'"
+    },
+    {
+      "name": "app.storage.image-dir",
+      "type": "java.lang.String",
+      "description": "A description for 'app.storage.image-dir'"
+    },
+    {
+      "name": "app.storage.pdf-dir",
+      "type": "java.lang.String",
+      "description": "A description for 'app.storage.pdf-dir'"
+    }
+  ]
+}
