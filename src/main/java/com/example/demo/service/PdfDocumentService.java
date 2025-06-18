@@ -161,4 +161,26 @@ public class PdfDocumentService {
     public Optional<PdfDocument> findByIdAndFileName(Long id, String fileName) {
         return pdfDocumentRepository.findByIdAndFileName(id, fileName);
     }
+
+
+    @Transactional
+    public void updateById(Long id, PdfDocument updatedFields) {
+        Optional<PdfDocument> optionalDoc = pdfDocumentRepository.findById(id);
+        if (!optionalDoc.isPresent()) {
+            throw new IllegalArgumentException("文档不存在，ID: " + id);
+        }
+
+        PdfDocument existingDoc = optionalDoc.get();
+
+        // 只更新非空字段
+        if (updatedFields.getTxtPath() != null) {
+            // 修正：使用 setter 而非 getter
+            existingDoc.setTxtPath(updatedFields.getTxtPath());
+        }
+
+        // 可以添加其他字段的更新逻辑
+
+        pdfDocumentRepository.save(existingDoc);
+    }
+
 }

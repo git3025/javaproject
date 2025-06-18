@@ -5,9 +5,12 @@ package com.example.demo.controller;
 
 import com.example.demo.entity.DetectionRequest;
 import com.example.demo.entity.DetectionResponse;
+import com.example.demo.entity.PdfDocument;
 import com.example.demo.service.DetectionService;
+import com.example.demo.service.PdfDocumentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,6 +32,9 @@ import java.util.List;
 public class DetectionController {
     private static final Logger logger = LoggerFactory.getLogger(DetectionController.class);
     private final DetectionService detectionService;
+
+    @Autowired
+    private PdfDocumentService pdfDocumentService;
 
     public DetectionController(DetectionService detectionService) {
         this.detectionService = detectionService;
@@ -74,13 +80,25 @@ public class DetectionController {
             }
         }
 
+
         // 调用检测服务
         DetectionResponse response = detectionService.detect(request);
 
         if (response.isSuccess()) {
-            // 根据ISBN字段查询pdf_pages表中符合条件的数据，将符合条件的字段的object_detection的值改为0
-
-
+            // 新增：更新数据库中的txtPath字段
+            try {
+                if (request.getId() != null) {
+                    PdfDocument updatedDoc = new PdfDocument();
+                    updatedDoc.setTxtPath(response.getTxtPath());
+                    pdfDocumentService.updateById(request.getId(), updatedDoc);
+                    logger.info("成功更新ID为{}的文档切片路径: {}", request.getId(), response.getTxtPath());
+                } else {
+                    logger.warn("请求中未提供ID，无法更新切片路径");
+                }
+            } catch (Exception e) {
+                logger.error("更新切片路径失败", e);
+                // 可以选择返回错误响应，或继续返回成功响应（取决于业务需求）
+            }
             return ResponseEntity.ok(response);
         } else {
             return ResponseEntity.badRequest().body(response);

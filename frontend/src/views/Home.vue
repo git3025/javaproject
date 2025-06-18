@@ -42,6 +42,7 @@
               <th>书籍页码</th>
               <th>书籍路径</th>
               <th>ISBN码</th>
+              <th>检测路径</th>
               <th>是否切割</th>
               <th>上传时间</th>
               <th>操作</th>
@@ -62,6 +63,7 @@
               <td>{{ doc.pages }}</td>
               <td>{{ doc.filePath + '\\' + doc.fileName }}</td>
               <td>{{ doc.isbn }}</td>
+              <td>{{ doc.txtPath }}</td>
               <td :data-status="doc.slicing">
                 {{ doc.slicing === 1 ? '未切割' : '已切割' }}
               </td>
@@ -324,7 +326,7 @@ const handleDetect = async () => {
         } else {
           ElMessage.error('检测失败: ' + response.data.message);
         }
-      }, 1000);
+      }, 500);
 
     } catch (error) {
       // 错误处理
@@ -337,7 +339,7 @@ const handleDetect = async () => {
         isDetecting.value = false;
         console.error('检测请求失败:', error);
         ElMessage.error('检测请求失败: ' + error.message);
-      }, 1000);
+      }, 500);
     }
   } else {
     // 未切割，提示用户不能检测
@@ -449,7 +451,7 @@ const handleDetect = async () => {
 
 .document-table thead th:nth-child(2),
 .document-table tbody td:nth-child(2) {
-  width: 7% !important;
+  width: 8% !important;
 }
 
 .document-table thead th:nth-child(3),
@@ -475,7 +477,10 @@ const handleDetect = async () => {
 }
 
 
-
+.document-table thead th:nth-child(8),
+.document-table tbody td:nth-child(8) {
+  width: 20% !important;
+}
 
 .split-button-disabled {
   background-color: #ccc; /* 灰色背景 */
