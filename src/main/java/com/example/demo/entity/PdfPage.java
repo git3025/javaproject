@@ -87,4 +87,5 @@ public class PdfPage {
 
     @Column
     private Integer objectDetection;
+
 } 

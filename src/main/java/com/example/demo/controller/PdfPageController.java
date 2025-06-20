@@ -3,7 +3,8 @@ package com.example.demo.controller;
 import com.example.demo.entity.PdfPage;
 import com.example.demo.service.FileStorageService;
 import com.example.demo.service.PdfPageService;
-import com.example.demo.utils.CropRequest;
+
+import com.example.demo.dto.SomeDto; // 导入 SomeDto 类
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -152,11 +153,11 @@ public class PdfPageController {
         try {
             BufferedImage originalImage = ImageIO.read(new File(imagePath));
             if (originalImage == null) {
-                Map<String, String> error = Collections.singletonMap("error", "无法读取原始图像");
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Collections.singletonMap("error", "无法读取原始图像"));
             }
 
-            // 提取 ISBN 码
+            // 获取目标目录结构
             File imageFile = new File(imagePath);
             File pageDir = imageFile.getParentFile(); // D:\pdf\45778985\page
             File isbnDir = pageDir.getParentFile();   // D:\pdf\45778985
@@ -168,20 +169,14 @@ public class PdfPageController {
                 questionDir.mkdirs();
             }
 
-            // 获取原图文件名（如 1.png → page1）
-            String originalFileName = imageFile.getName(); // 如 "1.png"
-            String targetSubDirName = originalFileName.split("\\.")[0]; // 去掉扩展名 → "1"
-            //String targetSubDirName =  baseName;      // → page1
+            String targetSubDirName = imageFile.getName().split("\\.")[0];
             File targetSubDir = new File(questionDir, targetSubDirName);
-
-            // 自动创建目录（如果不存在）
             if (!targetSubDir.exists()) {
                 targetSubDir.mkdirs();
             }
 
             // 使用当前页内的顺序编号命名
             String fileName = order + ".png";
-
             String outputPath = new File(targetSubDir, fileName).getPath();
 
             // 执行裁剪
@@ -286,7 +281,7 @@ public class PdfPageController {
         List<String> imageBase64List = (List<String>) payload.get("images");
         Integer baseNameIndex = (Integer) payload.get("baseName");
         String selectedImageId = (String) payload.get("selectedImageId"); // 从请求体中获取 selectedImageId
-
+        Integer order = (Integer) payload.get("order");  // 新增字段
 
         if (imageBase64List == null || imageBase64List.isEmpty()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -324,8 +319,9 @@ public class PdfPageController {
                 zcDir.mkdirs();
             }
 
-            String fileName = "merged_" + System.currentTimeMillis() + ".png";
-            String outputPath = fileStorageService.mergeAndSaveImages(bufferedImages, zcDir.getAbsolutePath(), fileName);
+            // 使用新的 mergeAndSaveImages 方法，并传入 order 参数
+            String outputPath = fileStorageService.mergeAndSaveImages(bufferedImages, zcDir.getAbsolutePath(), "merged", order);
+
 
             return ResponseEntity.ok(Collections.singletonMap("outputPath", outputPath));
 
@@ -335,7 +331,13 @@ public class PdfPageController {
                     .body(Collections.singletonMap("error", "合并失败：" + e.getMessage()));
         }
     }
-    @DeleteMapping("/clear-temp-merged")
+    @PostMapping("/some-path")
+    public ResponseEntity<?> someMethod(@RequestBody SomeDto dto) {
+        System.out.println("Received data: " + dto.getField1() + ", " + dto.getField2());
+        return ResponseEntity.ok().build();
+    }
+
+    @RequestMapping(value = "/clear-temp-merged", method = {RequestMethod.DELETE, RequestMethod.POST})
     public ResponseEntity<String> clearTempMergedFolder(@RequestParam String isbn) {
         Path zcPath = Paths.get("D:/pdf", isbn, "question", "zc"); // 可以改为动态路径拼接
         if (Files.exists(zcPath)) {
@@ -366,6 +368,10 @@ public class PdfPageController {
             Path source = Paths.get(srcPath);
             Path destination = Paths.get(destPath);
 
+            if (!Files.exists(source)) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Collections.singletonMap("error", "源文件不存在"));
+            }
 
             Files.createDirectories(destination.getParent());
 
@@ -374,6 +380,7 @@ public class PdfPageController {
             return ResponseEntity.ok(Collections.singletonMap("message", "文件复制成功"));
 
         } catch (IOException e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.singletonMap("error", "复制失败：" + e.getMessage()));
         }

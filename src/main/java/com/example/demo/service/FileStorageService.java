@@ -104,7 +104,7 @@ public class FileStorageService {
      * 合并多张图片并保存为固定文件名 merged.png（竖向拼接）
      */
     private static int currentMergeIndex = 1;
-    public String mergeAndSaveImages(List<BufferedImage> images, String outputDir, String baseName) throws IOException {
+    public String mergeAndSaveImages(List<BufferedImage> images, String outputDir, String baseName,int baseOrder) throws IOException {
         if (images == null || images.isEmpty()) {
             throw new IllegalArgumentException("没有可合并的图片");
         }
