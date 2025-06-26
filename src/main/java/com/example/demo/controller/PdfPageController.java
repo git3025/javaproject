@@ -474,4 +474,51 @@ public class PdfPageController {
         // 处理逻辑
         return ResponseEntity.ok("Imported questions successfully");
     }
+    
+    @PutMapping("/update-question")
+    public ResponseEntity<Void> updateQuestion(@RequestBody Map<String, Object> payload) {
+        try {
+            Long id = Long.valueOf(String.valueOf(payload.get("id")));
+            Optional<ViewQuestion> questionOpt = viewQuestionService.findById(id);
+            
+            if (!questionOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            ViewQuestion question = questionOpt.get();
+            
+            // 更新字段
+            if (payload.containsKey("question_number")) {
+                Object questionNumberObj = payload.get("question_number");
+                if (questionNumberObj instanceof Integer) {
+                    question.setQuestionNumber((Integer) questionNumberObj);
+                } else if (questionNumberObj instanceof String) {
+                    question.setQuestionNumber(Integer.parseInt((String) questionNumberObj));
+                }
+            }
+            
+            if (payload.containsKey("answer")) {
+                question.setAnswer((String) payload.get("answer"));
+            }
+            
+            if (payload.containsKey("analysis")) {
+                question.setAnalysis((String) payload.get("analysis"));
+            }
+            
+            if (payload.containsKey("knowledge")) {
+                question.setKnowledge((String) payload.get("knowledge"));
+            }
+            
+            if (payload.containsKey("merge_graph")) {
+                question.setMergeGraph((String) payload.get("merge_graph"));
+            }
+            
+            viewQuestionService.save(question);
+            
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }

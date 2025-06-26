@@ -7,6 +7,63 @@
         </div>
       </template>
 
+      <div class="filter-section">
+        <el-form :model="filters" label-width="100px" size="small">
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="学科名称">
+                <el-input v-model="filters.subject" placeholder="请输入学科名称" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="书籍名称">
+                <el-input v-model="filters.fileName" placeholder="请输入书籍名称" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="书籍页码">
+                <el-input v-model="filters.pages" placeholder="请输入页码" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="ISBN码">
+                <el-input v-model="filters.isbn" placeholder="请输入ISBN码" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="是否切割">
+                <el-select v-model="filters.slicing" placeholder="请选择状态" clearable style="width: 100%">
+                  <el-option label="未切割" value="1" />
+                  <el-option label="已切割" value="0" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="上传时间">
+                <el-date-picker
+                    v-model="filters.uploadTime"
+                    type="daterange"
+                    range-separator="至"
+                    start-placeholder="开始日期"
+                    end-placeholder="结束日期"
+                    style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row justify="end">
+            <el-button @click="applyFilters">查询</el-button>
+            <el-button @click="resetFilters">重置</el-button>
+          </el-row>
+        </el-form>
+      </div>
+
       <div class="card-content">
         <div class="document-list">
           <h3>PDF文档列表</h3>
@@ -186,19 +243,84 @@ const pageSize = ref(15)
 const total = ref(0)
 
 const pagedDocuments = computed(() => {
-  total.value = documents.value.length;
-  const start = (currentPage.value - 1) * pageSize.value;
-  return documents.value.slice(start, start + pageSize.value);
-});
+  total.value = filteredDocuments.value.length
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredDocuments.value.slice(start, start + pageSize.value)
+})
+
+const resetFilters = () => {
+  filters.value = {
+    subject: '',
+    fileName: '',
+    pages: '',
+    isbn: '',
+    slicing: '',
+    uploadTime: []
+  };
+  currentPage.value = 1;
+};
 
 const handleCurrentChange = (val) => {
   currentPage.value = val;
 };
 
+const filteredDocuments = ref([]) // 存储筛选后的文档列表
 const fetchDocuments = async () => {
   documents.value = await getDocuments()
+  applyFilters() // 获取数据后立即应用一次筛选（默认为空）
 }
+const applyFilters = () => {
+  let filtered = [...documents.value]
 
+  // 学科名称过滤
+  if (filters.value.subject) {
+    filtered = filtered.filter(doc =>
+        doc.subject?.toLowerCase().includes(filters.value.subject.toLowerCase())
+    )
+  }
+
+  // 书籍名称过滤
+  if (filters.value.fileName) {
+    filtered = filtered.filter(doc =>
+        doc.file_name?.toLowerCase().includes(filters.value.fileName.toLowerCase())
+    )
+  }
+
+  // 书籍页码过滤
+  if (filters.value.pages) {
+    filtered = filtered.filter(doc =>
+        String(doc.pages).includes(filters.value.pages)
+    )
+  }
+
+  // ISBN 过滤
+  if (filters.value.isbn) {
+    filtered = filtered.filter(doc =>
+        doc.isbn?.toLowerCase().includes(filters.value.isbn.toLowerCase())
+    )
+  }
+
+  // 是否切割过滤
+  if (filters.value.slicing !== '') {
+    filtered = filtered.filter(doc =>
+        String(doc.slicing) === filters.value.slicing
+    )
+  }
+
+  // 上传时间范围过滤
+  if (filters.value.uploadTime && filters.value.uploadTime.length === 2) {
+    const [startDate, endDate] = filters.value.uploadTime
+    if (startDate && endDate) {
+      filtered = filtered.filter(doc => {
+        const uploadDate = new Date(doc.upload_time)
+        return uploadDate >= startDate && uploadDate <= endDate
+      })
+    }
+  }
+
+  filteredDocuments.value = filtered
+  currentPage.value = 1 // 回到第一页
+}
 onMounted(() => {
   fetchDocuments()
 })
@@ -390,6 +512,14 @@ const handleDetect = async () => {
     });
   }
 };
+const filters = ref({
+  subject: '',
+  fileName: '',
+  pages: '',
+  isbn: '',
+  slicing: '', // '1' 表示未切割, '0' 表示已切割
+  uploadTime: [] // [startDate, endDate]
+});
 </script>
 
 <style scoped>
@@ -547,49 +677,15 @@ const handleDetect = async () => {
   text-align: center;
 }
 
-
-.el-radio {
-  margin-right: -10px;
+.filter-section {
+  margin-bottom: 20px;
+  background-color: #f9f9f9;
+  padding: 16px;
+  border-radius: 8px;
 }
 
-
-/* 新增样式 */
-.detection-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000;
-}
-
-.progress-text {
-  margin-top: 20px;
-  color: white;
-  font-size: 18px;
-  font-weight: bold;
-}
-
-/* 调整按钮加载状态样式 */
-.el-button.is-loading {
-  position: relative;
-  pointer-events: none;
-}
-
-.el-button.is-loading:before {
-  content: "";
-  position: absolute;
-  left: -1px;
-  top: -1px;
-  right: -1px;
-  bottom: -1px;
-  border-radius: inherit;
-  background-color: rgba(255, 255, 255, 0.35);
+.el-form-item__content {
+  width: 100%;
 }
 
 .splitting-overlay {

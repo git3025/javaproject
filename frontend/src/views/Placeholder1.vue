@@ -6,7 +6,49 @@
           <h2>PDF 文档管理 - 检测配置</h2>
         </div>
       </template>
+      <div class="filter-section">
+        <el-form :model="filters" label-width="100px" size="small">
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="ISBN码">
+                <el-input v-model="filters.isbn" placeholder="请输入ISBN码" clearable />
+              </el-form-item>
+            </el-col>
 
+            <el-col :span="8">
+              <el-form-item label="书籍名称">
+                <el-input v-model="filters.book_name" placeholder="请输入书籍名称" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="学科名称">
+                <el-input v-model="filters.subject" placeholder="请输入学科名称" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="书籍页码">
+                <el-input v-model="filters.book_page" placeholder="请输入书籍页码" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="是否调用检测">
+                <el-select v-model="filters.object_detection" placeholder="请选择状态" clearable style="width: 100%">
+                  <el-option label="未调用" value="1" />
+                  <el-option label="已调用" value="0" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row justify="end">
+            <el-button @click="applyFilters">查询</el-button>
+            <el-button @click="resetFilters">重置</el-button>
+          </el-row>
+        </el-form>
+      </div>
       <div class="card-content">
         <div class="document-list">
           <h3>书籍图片列表</h3>
@@ -71,18 +113,43 @@
   <el-dialog
       title="题目列表"
       v-model="questionDialogVisible"
-      width="80%"
+      width="90%"
       :before-close="handleClose">
     <div class="questions-container-vertical">
       <div v-for="(question, index) in questionList" :key="index" class="question-item-horizontal">
         <img :src="getQuestionImageUrl(question.path)" alt="题目图片" class="question-image" />
-        <div class="question-info-right">
-          <div class="question-number">题号: {{ question.question_number }}</div>
+        <div class="question-table-container">
+          <el-table :data="[question]" border style="width: 100%">
+            <el-table-column prop="question_number" label="题号" width="80">
+              <template #default="scope">
+                <el-input v-model="scope.row.question_number" size="small" />
+              </template>
+            </el-table-column>
+            <el-table-column label="题目信息" width="780">
+              <template #default="scope">
+                <div class="vertical-fields">
+                  <div class="field-item">
+                    <label>答案：</label>
+                    <el-input v-model="scope.row.answer" size="small" type="textarea" :rows="2" placeholder="请输入答案" />
+                  </div>
+                  <div class="field-item">
+                    <label>解析：</label>
+                    <el-input v-model="scope.row.analysis" size="small" type="textarea" :rows="2" placeholder="请输入解析" />
+                  </div>
+                  <div class="field-item">
+                    <label>知识点：</label>
+                    <el-input v-model="scope.row.knowledge" size="small" type="textarea" :rows="2" placeholder="请输入知识点" />
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
       </div>
     </div>
     <template #footer>
     <span class="dialog-footer">
+      <el-button @click="saveQuestions">保存</el-button>
       <el-button @click="questionDialogVisible = false">关闭</el-button>
     </span>
     </template>
@@ -95,7 +162,15 @@ import api from '../api'
 import { getImageUrl } from '../api'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus';
+const filters = ref({
+  isbn: '',
+  book_name: '',
+  subject: '',
+  book_page: '',
+  object_detection: ''
+});
 
+const filteredDocuments = ref([]); // 存储筛选后的文档列表
 // 弹窗控制
 const questionDialogVisible = ref(false)
 const questionList = ref([])
@@ -122,10 +197,21 @@ const pageSize = ref(15)
 const total = ref(0)
 
 const pagedDocuments = computed(() => {
-  total.value = documents.value.length;
-  const start = (currentPage.value - 1) * pageSize.value;
-  return documents.value.slice(start, start + pageSize.value);
-});
+  total.value = filteredDocuments.value.length
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredDocuments.value.slice(start, start + pageSize.value)
+})
+
+const resetFilters = () => {
+  filters.value = {
+    isbn: '',
+    book_name: '',
+    subject: '',
+    book_page: '',
+    object_detection: ''
+  }
+  applyFilters()
+}
 
 const handleCurrentChange = (val) => {
   currentPage.value = val;
@@ -139,10 +225,48 @@ const fetchDocuments = async () => {
       ...doc,
       bookPage: extractPageFromPath(doc.book_path), // 提取页码
       selected: false, // 添加 selected 字段
-    }))
+    }));
+    applyFilters(); // 初始化筛选列表
   } catch (err) {
     console.error('获取文档失败', err)
   }
+}
+
+const applyFilters = () => {
+  let filtered = [...documents.value]
+
+  if (filters.value.isbn) {
+    filtered = filtered.filter(doc =>
+        doc.isbn?.toLowerCase().includes(filters.value.isbn.toLowerCase())
+    )
+  }
+
+  if (filters.value.book_name) {
+    filtered = filtered.filter(doc =>
+        doc.book_name?.toLowerCase().includes(filters.value.book_name.toLowerCase())
+    )
+  }
+
+  if (filters.value.subject) {
+    filtered = filtered.filter(doc =>
+        doc.subject?.toLowerCase().includes(filters.value.subject.toLowerCase())
+    )
+  }
+
+  if (filters.value.book_page) {
+    filtered = filtered.filter(doc =>
+        String(doc.book_page).includes(filters.value.book_page)
+    )
+  }
+
+  if (filters.value.object_detection !== '') {
+    filtered = filtered.filter(doc =>
+        String(doc.object_detection) === filters.value.object_detection
+    )
+  }
+
+  filteredDocuments.value = filtered
+  currentPage.value = 1 // 回到第一页
 }
 
 // 提取文件名中的页码（如 page1.png -> page1）
@@ -307,6 +431,39 @@ const handleClose = () => {
   questionList.value = []
 }
 
+// 保存题目数据
+const saveQuestions = async () => {
+  try {
+    for (const question of questionList.value) {
+      if (!question.id || question.id === 'null') {
+        ElMessage.error('题目ID缺失，无法保存');
+        continue;
+      }
+      console.log('即将保存的题目对象：', question);
+      const response = await fetch('http://localhost:8080/api/pdf-pages/update-question', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: question.id,
+          question_number: question.question_number,
+          answer: question.answer || '',
+          analysis: question.analysis || '',
+          knowledge: question.knowledge || '',
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('保存失败')
+      }
+    }
+
+    ElMessage.success('保存成功')
+  } catch (error) {
+    console.error('保存题目失败:', error)
+    ElMessage.error('保存失败')
+  }
+}
+
 const formatDate = (dateStr) => {
   if (!dateStr) return 'N/A';
   const fixedStr = dateStr.replace(' ', 'T');
@@ -373,31 +530,6 @@ onMounted(() => {
   background-color: #d0eaff;
 }
 
-/* 图片框选样式 */
-.image-wrapper {
-  position: relative;
-  display: inline-block;
-  cursor: crosshair;
-}
-
-.selection-box {
-  position: absolute;
-  border: 2px solid red; /* 仅红色边框 */
-  pointer-events: none;
-  top: 0;
-  left: 0;
-  display: none;
-  z-index: 10;
-}
-
-.saved-selection {
-  position: absolute;
-  border: 2px solid red;
-  pointer-events: none;
-  top: 0;
-  left: 0;
-  z-index: 5;
-}
 
 .questions-container-vertical {
   display: flex;
@@ -423,6 +555,11 @@ onMounted(() => {
   border-radius: 4px;
 }
 
+.question-table-container {
+  flex: 1;
+  min-width: 0;
+}
+
 .question-info-right {
   flex: 1;
   display: flex;
@@ -431,13 +568,43 @@ onMounted(() => {
 }
 
 .question-number {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: bold;
   color: #333;
   margin: 0;
-  padding: 8px 12px;
+  padding: 4px 8px;
   background: #f0f8ff;
   border-radius: 4px;
   border-left: 4px solid #4a90e2;
+  align-self: flex-start;
+  width: fit-content;
+}
+
+.filter-section {
+  margin-bottom: 20px;
+  background-color: #f9f9f9;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.el-form-item__content {
+  width: 100%;
+}
+
+.vertical-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-item label {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 5px;
 }
 </style>

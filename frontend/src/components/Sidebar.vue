@@ -2,14 +2,14 @@
   <div class="sidebar">
     <ul>
       <li>
-        <router-link :to="{ name: 'Home' }">pdf列表</router-link>
+        <router-link :to="{ name: 'Home' }">PDF文档列表</router-link>
       </li>
 
       <li>
-        <router-link :to="{ name: 'Placeholder1' }">111（预留页面）</router-link>
+        <router-link :to="{ name: 'Placeholder1' }">书籍图片列表</router-link>
       </li>
       <li>
-        <router-link :to="{ name: 'Placeholder2' }">222（预留页面）</router-link>
+        <router-link :to="{ name: 'Placeholder2' }">（预留页面）</router-link>
       </li>
     </ul>
   </div>

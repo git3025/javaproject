@@ -74,7 +74,7 @@
       </template>
     </el-dialog>
     <!-- 查看题目弹窗 -->
-    <el-dialog title="题目列表" v-model="questionDialogVisible" width="80%" :before-close="handleClose">
+    <el-dialog title="题目列表" v-model="questionDialogVisible" width="60%" :before-close="handleClose">
       <div class="questions-container-vertical">
         <div v-for="question in sortedQuestions"
              :key="question.id"
@@ -82,18 +82,38 @@
           <img :src="getQuestionImageUrl(question.path)"
                :alt="'题目' + question.questionNumber"
                class="question-image"/>
-          <div class="question-info-right">
-            <div class="question-number">题号: {{ question.questionNumber || question.question_number }}</div>
-            <div class="question-details">
-              <div>ISBN: {{ question.ISBN }}</div>
-              <div>页码: {{ question.pages }}</div>
-              <div>文件名: {{ question.name }}</div>
-            </div>
+          <div class="question-table-container">
+            <el-table :data="[question]" border style="width: 100%">
+              <el-table-column prop="question_number" label="题号" width="80">
+                <template #default="scope">
+                  <el-input v-model="scope.row.question_number" size="small" />
+                </template>
+              </el-table-column>
+              <el-table-column label="题目信息" width="780">
+                <template #default="scope">
+                  <div class="vertical-fields">
+                    <div class="field-item">
+                      <label>答案：</label>
+                      <el-input v-model="scope.row.answer" size="small" type="textarea" :rows="2" placeholder="请输入答案" />
+                    </div>
+                    <div class="field-item">
+                      <label>解析：</label>
+                      <el-input v-model="scope.row.analysis" size="small" type="textarea" :rows="2" placeholder="请输入解析" />
+                    </div>
+                    <div class="field-item">
+                      <label>知识点：</label>
+                      <el-input v-model="scope.row.knowledge" size="small" type="textarea" :rows="2" placeholder="请输入知识点" />
+                    </div>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
         </div>
       </div>
       <template #footer>
         <span class="dialog-footer">
+          <el-button @click="saveQuestions">保存</el-button>
           <el-button @click="questionDialogVisible = false">关闭</el-button>
         </span>
       </template>
@@ -1118,23 +1138,6 @@ const sortedQuestions = computed(() => {
   });
 });
 
-// 查看题目方法
-const showQuestions = async (doc) => {
-  try {
-    // 提取数字部分
-    const pageNumber = doc.bookPage.replace(/[^\d]/g, '');
-    const response = await fetch(`http://localhost:8080/api/pdf-pages/by-page?isbn=${doc.isbn}&page=${pageNumber}`)
-    if (!response.ok) {
-      throw new Error('获取题目失败')
-    }
-    const data = await response.json()
-    questionList.value = data
-    questionDialogVisible.value = true
-  } catch (error) {
-    console.error('获取题目失败:', error)
-    ElMessage.error('获取题目失败')
-  }
-}
 
 // 添加获取题目图片URL的方法
 const getQuestionImageUrl = (path) => {
@@ -1142,6 +1145,13 @@ const getQuestionImageUrl = (path) => {
   const encodedPath = encodeURIComponent(path);
   return `http://localhost:8080/api/files/image?path=${encodedPath}`;
 };
+
+// 关闭弹窗
+const handleClose = () => {
+  questionDialogVisible.value = false
+  questionList.value = []
+}
+
 
 </script>
 
@@ -1277,23 +1287,6 @@ img {
   transform: translateZ(0); /* 启用硬件加速 */
 }
 
-.question-number {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-  text-align: center;
-  margin-bottom: 8px;
-  padding: 4px;
-  background: #e8e8e8;
-  border-radius: 4px;
-}
-
-.question-details {
-  font-size: 14px;
-  color: #666;
-  display: grid;
-  gap: 4px;
-}
 
 .question-details > div {
   padding: 2px 0;
@@ -1309,7 +1302,7 @@ img {
 
 .question-item-horizontal {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   border: 1px solid #eee;
   border-radius: 8px;
   padding: 15px;
@@ -1324,9 +1317,15 @@ img {
   border-radius: 4px;
 }
 
+.question-table-container {
+  flex: 1;
+  min-width: 0;
+}
+
 .question-info-right {
   display: flex;
   gap: 10px;
+  max-width: 120px;
 }
 
 .question-info-right .question-number {
@@ -1334,7 +1333,7 @@ img {
   font-weight: bold;
   color: #333;
   margin: 0;
-  padding: 8px 12px;
+  padding: 4px 8px;
   background: #f0f8ff;
   border-radius: 4px;
   border-left: 4px solid #4a90e2;
@@ -1351,5 +1350,22 @@ img {
 .question-info-right .question-details > div {
   padding: 4px 0;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.vertical-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-item label {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 5px;
 }
 </style>
