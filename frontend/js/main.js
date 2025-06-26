@@ -1,3 +1,10 @@
+import Vue from 'vue'
+import ElementUI from 'element-ui'
+import locale from 'element-ui/lib/locale/lang/zh-CN'
+import 'element-ui/lib/theme-chalk/index.css'
+
+Vue.use(ElementUI, { locale })
+
 // 创建Vue实例
 new Vue({
     el: '#app',

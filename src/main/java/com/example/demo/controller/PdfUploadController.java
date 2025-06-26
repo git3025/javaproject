@@ -68,6 +68,7 @@ public class PdfUploadController {
 
             PdfDocument document = documentOpt.get();
 
+
             // 判断是否已经切割过
             if (document.getSlicing() == 0) {
                 return ResponseEntity.badRequest().body("该文件已切割，不允许重复切割");
@@ -75,7 +76,7 @@ public class PdfUploadController {
 
             String pdfPath = document.getFilePath(); // 获取 PDF 文件路径
             String outputFolder = pdfPath + File.separator + "page"; // 输出路径为 page 子目录
-
+            document.setSlicingPath(outputFolder);
             // 创建输出目录（如果不存在）
             File dir = new File(outputFolder);
             if (!dir.exists()) {
@@ -91,12 +92,13 @@ public class PdfUploadController {
                 BufferedImage image = renderer.renderImageWithDPI(i, 300); // DPI=300
                 String imagePath = outputFolder + File.separator + "page" + (i + 1) + ".png";
                 ImageIO.write(image, "PNG", new File(imagePath));
-
+                PdfDocument pdfDoc = new PdfDocument();
                 PdfPage page = new PdfPage();
                 page.setISBN(document.getISBN());
                 page.setBookName(document.getFileName());
                 page.setSubject(document.getSubject());
                 page.setBookPage("page" + (i + 1));
+
                 page.setBookPath(imagePath);
                 page.setObjectDetection(1); // 默认启用
                 pdfPageService.updatePage(page); // 使用注入的 pdfPageService

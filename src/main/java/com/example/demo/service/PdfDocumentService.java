@@ -79,8 +79,8 @@ public class PdfDocumentService {
     }
 
 
-    public List<PdfDocument> searchByISBN(String isbn) {
-        return pdfDocumentRepository.findByISBN(isbn);
+    public List<PdfDocument> searchByISBN(String ISBN) {
+        return pdfDocumentRepository.findByISBN(ISBN);
     }
 
     public List<PdfDocument> searchByUploadTimeRange(LocalDateTime startDate, LocalDateTime endDate) {

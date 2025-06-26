@@ -1,10 +1,12 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.SomeDto;
+import com.example.demo.entity.PdfDocument;
 import com.example.demo.entity.PdfPage;
+import com.example.demo.entity.ViewQuestion;
 import com.example.demo.service.FileStorageService;
 import com.example.demo.service.PdfPageService;
-
-import com.example.demo.dto.SomeDto; // 导入 SomeDto 类
+import com.example.demo.service.ViewQuestionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -12,38 +14,34 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import javax.imageio.ImageIO;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/pdf-pages")
 @CrossOrigin(origins = "http://localhost:5173")
+
 public class PdfPageController {
 
     @Autowired
     private PdfPageService pdfPageService;
     @Autowired
     private FileStorageService fileStorageService;
-
+    @Autowired
+    private ViewQuestionService viewQuestionService;
 
     /**
      * 获取所有分页数据
@@ -80,10 +78,6 @@ public class PdfPageController {
         }
     }
 
-
-
-
-
     @GetMapping("/images/{id}")
     public ResponseEntity<PdfPage> getImages(@PathVariable Long id) {
         System.out.println("===============================================");
@@ -103,11 +97,6 @@ public class PdfPageController {
             return ResponseEntity.notFound().build();
         }
     }
-
-
-
-
-
     /**
      * 根据 ID 获取单个分页
      */
@@ -182,6 +171,7 @@ public class PdfPageController {
             // 执行裁剪
             BufferedImage croppedImage = originalImage.getSubimage(x, y, width, height);
             ImageIO.write(croppedImage, "png", new File(outputPath));
+
 
             String imageUrl = "http://localhost:8080/api/pdf-pages/image?path=" + outputPath;
 
@@ -398,5 +388,90 @@ public class PdfPageController {
                     .body(Collections.singletonMap("error", "创建目录失败：" + e.getMessage()));
         }
     }
+    @PostMapping("/view-question")
+    public ResponseEntity<Void> saveView(@RequestBody Map<String, Object> payload) {
+        try {
+            String isbn = (String) payload.get("ISBN");
+            String pages = (String) payload.get("pages");
+            int pageNum = Integer.parseInt(pages.replaceAll("\\D+", ""));
+            String name = String.valueOf(payload.get("name"));
+            name = name+".png";
+            int questionNumber;
+            Object questionObj = payload.get("question_number");
+            if (questionObj instanceof Integer) {
+                questionNumber = (Integer) questionObj;
+            } else if (questionObj instanceof String) {
+                questionNumber = Integer.parseInt((String) questionObj);
+            } else {
+                questionNumber = Integer.parseInt(String.valueOf(questionObj));
+            }
+            String path = (String) payload.get("path");
 
+
+            ViewQuestion view = new ViewQuestion();
+            view.setISBN(isbn);
+            view.setPages(pageNum);
+            view.setName(name);
+            view.setQuestionNumber(questionNumber);
+            view.setPath(path);
+
+            viewQuestionService.save(view);
+
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/by-page")
+    public ResponseEntity<List<ViewQuestion>> getQuestionsByPage(
+            @RequestParam String isbn,
+            @RequestParam String page) {
+        try {
+            // 添加参数验证
+            if (isbn == null || isbn.trim().isEmpty()) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            List<ViewQuestion> questions = viewQuestionService.findByIsbnAndPage(isbn, page);
+
+            // 如果没有找到数据，返回空列表而不是null
+            if (questions == null) {
+                questions = Collections.emptyList();
+            }
+
+            return ResponseEntity.ok(questions);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/question-image")
+    public ResponseEntity<Resource> getQuestionImage(@RequestParam String path) {
+        try {
+            Path imagePath = Paths.get(path);
+            Resource resource = new UrlResource(imagePath.toUri());
+            
+            if (resource.exists() && resource.isReadable()) {
+                return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_PNG)
+                    .body(resource);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    @PostMapping("/import-questions")
+    public ResponseEntity<String> importQuestions(
+            @RequestParam String isbn,
+            @RequestParam String page
+    ) {
+        // 处理逻辑
+        return ResponseEntity.ok("Imported questions successfully");
+    }
 }

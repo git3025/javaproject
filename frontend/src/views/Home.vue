@@ -49,7 +49,7 @@
             </tr>
             </thead>
             <tbody id="documents">
-            <tr v-for="doc in documents" :key="doc.id">
+            <tr v-for="doc in pagedDocuments" :key="doc.id">
               <td>
                 <el-radio
                     v-model="selectedDocument"
@@ -59,15 +59,15 @@
               </td>
               <td>{{ doc.id }}</td>
               <td>{{ doc.subject }}</td>
-              <td>{{ doc.fileName }}</td>
+              <td>{{ doc.file_name }}</td>          <!-- 书籍名称 -->
               <td>{{ doc.pages }}</td>
-              <td>{{ doc.filePath + '\\' + doc.fileName }}</td>
+              <td>{{ doc.file_path }}</td>          <!-- 书籍路径 -->
               <td>{{ doc.isbn }}</td>
-              <td>{{ doc.txtPath }}</td>
+              <td>{{ doc.slicing_path }}</td>       <!-- 检测路径 -->
               <td :data-status="doc.slicing">
                 {{ doc.slicing === 1 ? '未切割' : '已切割' }}
               </td>
-              <td>{{ new Date(doc.uploadTime).toLocaleString() }}</td>
+              <td>{{ formatDate(doc.upload_time) }}</td>  <!-- 上传时间 -->
               <td>
                 <el-button
                     size="small"
@@ -81,16 +81,22 @@
             </tr>
             </tbody>
           </table>
+          <!-- 分页组件 -->
+          <div class="pagination" style="margin-top: 20px; display: flex; justify-content: flex-end;">
+            <el-pagination
+              v-model:current-page="currentPage"
+              :page-size="pageSize"
+              :total="total"
+              layout="total, prev, pager, next, jumper"
+              :page-sizes="[15]"
+              :pager-count="11"
+              @current-change="handleCurrentChange"
+              background
+            />
+          </div>
         </div>
       </div>
     </el-card>
-
-
-
-
-
-
-
 
     <el-dialog v-model="dialogVisible" title="上传 PDF 文件" width="50%">
       <el-form :model="form" label-width="120px" ref="uploadFormRef">
@@ -123,12 +129,19 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 切割中悬浮窗 -->
+    <div v-if="isSplitting" class="splitting-overlay">
+      <div class="splitting-message">
+        正在切割中，请耐心等待...
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import '../../css/style.css'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Upload, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus' // 引入ElMessageBox用于弹出提示框
@@ -140,6 +153,7 @@ const isDetecting = ref(false);
 const progressPercent = ref(0);
 const progressStatus = ref(null);
 const progressText = ref('正在检测...');
+const isSplitting = ref(false)
 
 
 
@@ -152,15 +166,34 @@ const documents = ref([])
 const selectedDocument = ref(null)
 const selectedDocumentData = ref(null)
 
-
+const formatDate = (dateStr) => {
+  if (!dateStr) return 'N/A';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'Invalid Date';
+  return date.toLocaleString();
+};
 
 const dialogVisible = ref(false)
 const form = ref({
   subject: '',
   fileName: '',
   isbn: '',
-  file: null
+  file:null
 })
+
+const currentPage = ref(1)
+const pageSize = ref(15)
+const total = ref(0)
+
+const pagedDocuments = computed(() => {
+  total.value = documents.value.length;
+  const start = (currentPage.value - 1) * pageSize.value;
+  return documents.value.slice(start, start + pageSize.value);
+});
+
+const handleCurrentChange = (val) => {
+  currentPage.value = val;
+};
 
 const fetchDocuments = async () => {
   documents.value = await getDocuments()
@@ -202,6 +235,8 @@ const handleSplit = async (doc) => {
     return;
   }
 
+  isSplitting.value = true; // 开始切割时显示遮罩
+
   ElMessage.info('正在切割 PDF: ' + doc.fileName)
   try {
     const response = await api.post(`/pdf/split?id=${doc.id}`)
@@ -209,13 +244,10 @@ const handleSplit = async (doc) => {
     await fetchDocuments()
   } catch (error) {
     ElMessage.error('切割失败: ' + error.message)
+  } finally {
+    isSplitting.value = false; // 切割结束时关闭遮罩
   }
 }
-
-
-
-
-
 
 
 /**
@@ -247,7 +279,6 @@ const extractDirectory = (fullPath) => {
         : ''; // 特殊情况：路径中没有斜杠（可能是当前目录下的文件）
   }
 };
-
 
 
 // 目标检测功能
@@ -559,5 +590,24 @@ const handleDetect = async () => {
   bottom: -1px;
   border-radius: inherit;
   background-color: rgba(255, 255, 255, 0.35);
+}
+
+.splitting-overlay {
+  position: fixed;
+  z-index: 3000;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.splitting-message {
+  background: #fff;
+  color: #333;
+  font-size: 22px;
+  padding: 40px 60px;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.15);
+  font-weight: bold;
 }
 </style>

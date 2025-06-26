@@ -25,67 +25,80 @@
               <th>书籍页码</th>
               <th>书籍路径</th>
               <th>是否调用目标检测</th>
+              <th>操作</th>
             </tr>
             </thead>
             <tbody>
-
-            <tr v-for="doc in documents" :key="doc.id" :class="{ 'selected-row': doc.selected }">
+            <tr v-for="doc in pagedDocuments" :key="doc.id" :class="{ 'selected-row': doc.selected }">
               <td>
                 <input type="checkbox" v-model="doc.selected" @change="toggleRowSelection(doc)" />
               </td>
               <td>{{ doc.id }}</td>
               <td>{{ doc.isbn }}</td>
-              <td>{{ doc.bookName }}</td>
+              <td>{{ doc.book_name }}</td>
               <td>{{ doc.subject }}</td>
-              <td>{{ doc.bookPage }}</td>
+              <td>{{ doc.book_page }}</td>
               <td>
-                <!-- 图片容器用于框选 -->
-                <div class="image-wrapper"
-                     :ref="(el) => setImageWrapperRef(el, doc.id)"
-                     @mousedown="startDrawing(doc.id)"
-                     @mousemove="drawBox(doc.id)"
-                     @mouseup="endDrawing(doc.id)"
-                     @mouseleave="endDrawing(doc.id)">
-                  <img
-                      :src="getImageUrl(doc.id)"
-                      style="width: 100px;"
-                      @error="handleImageError"
-                  />
-                  <!-- 矩形框元素 -->
-                  <div
-                      class="selection-box"
-                      :ref="(el) => setSelectionBoxRef(el, doc.id)"
-                  ></div>
-                  <!-- 已完成的框选痕迹 -->
-                  <div v-for="(box, idx) in selections[doc.id]"
-                       :key="idx"
-                       class="saved-selection"
-                       :style="{
-                           left: `${box.x}px`,
-                           top: `${box.y}px`,
-                           width: `${box.width}px`,
-                           height: `${box.height}px`
-                         }"></div>
-                </div>
+                <img :src="getImageUrl(doc.id)" style="width: 100px;" @error="handleImageError" />
               </td>
-              <td :data-status="doc.objectDetection">
-                {{ doc.objectDetection === 1 ? '未调用' : '已调用' }}
+              <td :data-status="doc.object_detection">
+                {{ doc.object_detection === 1 ? '未调用' : '已调用' }}
+              </td>
+              <td>
+                <el-button type="primary" size="small" @click="showQuestions(doc)">查看题目</el-button>
               </td>
             </tr>
             </tbody>
           </table>
+          <!-- 分页组件 -->
+          <div class="pagination" style="margin-top: 20px; display: flex; justify-content: flex-end;">
+            <el-pagination
+                v-model:current-page="currentPage"
+                :page-size="pageSize"
+                :total="total"
+                layout="prev, pager, next, jumper, ->, total"
+                :page-sizes="[15]"
+                :pager-count="11"
+                @current-change="handleCurrentChange"
+                background
+            />
+          </div>
         </div>
       </div>
     </el-card>
   </div>
+  <!-- 查看题目弹窗 -->
+  <el-dialog
+      title="题目列表"
+      v-model="questionDialogVisible"
+      width="80%"
+      :before-close="handleClose">
+    <div class="questions-container-vertical">
+      <div v-for="(question, index) in questionList" :key="index" class="question-item-horizontal">
+        <img :src="getQuestionImageUrl(question.path)" alt="题目图片" class="question-image" />
+        <div class="question-info-right">
+          <div class="question-number">题号: {{ question.question_number }}</div>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+    <span class="dialog-footer">
+      <el-button @click="questionDialogVisible = false">关闭</el-button>
+    </span>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '../api'
 import { getImageUrl } from '../api'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus';
 
+// 弹窗控制
+const questionDialogVisible = ref(false)
+const questionList = ref([])
 
 const router = useRouter()
 const selectedDocuments = ref([])
@@ -104,13 +117,27 @@ let drawing = ref(false)
 let startX = ref(0)
 let startY = ref(0)
 
+const currentPage = ref(1)
+const pageSize = ref(15)
+const total = ref(0)
+
+const pagedDocuments = computed(() => {
+  total.value = documents.value.length;
+  const start = (currentPage.value - 1) * pageSize.value;
+  return documents.value.slice(start, start + pageSize.value);
+});
+
+const handleCurrentChange = (val) => {
+  currentPage.value = val;
+};
+
 // 获取所有分页数据
 const fetchDocuments = async () => {
   try {
     const res = await api.get('/pdf-pages/list')
     documents.value = res.data.map(doc => ({
       ...doc,
-      bookPage: extractPageFromPath(doc.bookPath), // 提取页码
+      bookPage: extractPageFromPath(doc.book_path), // 提取页码
       selected: false, // 添加 selected 字段
     }))
   } catch (err) {
@@ -243,9 +270,50 @@ const navigateToQuestionPage = () => {
   // 跳转到新的页面，并携带选中项的 id 参数
   router.push({
     path: '/question-preview',
-    query: { ids: selectedIds }
+    query: {ids: selectedIds}
   })
 }
+
+// 查看题目方法
+const showQuestions = async (doc) => {
+  try {
+    // 提取数字部分
+    const pageNumber = doc.book_page.replace(/[^\d]/g, '');
+    const response = await fetch(`http://localhost:8080/api/pdf-pages/by-page?isbn=${doc.isbn}&page=${pageNumber}`)
+    if (!response.ok) {
+      throw new Error('获取题目失败')
+    }
+    const data = await response.json();
+
+    // 确保按 question_number 排序（即使后端已排序，前端也可再次确认）
+    data.sort((a, b) => a.question_number - b.question_number);
+
+    questionList.value = data
+    questionDialogVisible.value = true
+  } catch (error) {
+    console.error('获取题目失败:', error)
+    ElMessage.error('获取题目失败')
+  }
+}
+
+// 获取题目图片URL
+const getQuestionImageUrl = (path) => {
+  return `http://localhost:8080/api/pdf-pages/question-image?path=${encodeURIComponent(path)}`
+}
+
+// 关闭弹窗
+const handleClose = () => {
+  questionDialogVisible.value = false
+  questionList.value = []
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return 'N/A';
+  const fixedStr = dateStr.replace(' ', 'T');
+  const date = new Date(fixedStr);
+  if (isNaN(date.getTime())) return 'Invalid Date';
+  return date.toLocaleString();
+};
 
 onMounted(() => {
   fetchDocuments()
@@ -321,6 +389,7 @@ onMounted(() => {
   display: none;
   z-index: 10;
 }
+
 .saved-selection {
   position: absolute;
   border: 2px solid red;
@@ -328,5 +397,47 @@ onMounted(() => {
   top: 0;
   left: 0;
   z-index: 5;
+}
+
+.questions-container-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.question-item-horizontal {
+  display: flex;
+  align-items: center;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.question-image {
+  max-width: 300px;
+  height: auto;
+  margin-right: 20px;
+  border-radius: 4px;
+}
+
+.question-info-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.question-number {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 0;
+  padding: 8px 12px;
+  background: #f0f8ff;
+  border-radius: 4px;
+  border-left: 4px solid #4a90e2;
 }
 </style>

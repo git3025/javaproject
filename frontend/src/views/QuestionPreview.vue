@@ -43,7 +43,7 @@
       top: `${box.y}px`,
       width: `${box.width}px`,
       height: `${box.height}px`,
-      transform: 'translateZ(0)' /* 启用硬件加速 */
+      //transform: 'translateZ(0)' /* 启用硬件加速 */
     }"
             @click.stop="toggleSelection(index, idx)"
         >
@@ -73,16 +73,42 @@
         <el-button @click="mergeSelectedInDialog">确认合并</el-button>
       </template>
     </el-dialog>
+    <!-- 查看题目弹窗 -->
+    <el-dialog title="题目列表" v-model="questionDialogVisible" width="80%" :before-close="handleClose">
+      <div class="questions-container-vertical">
+        <div v-for="question in sortedQuestions"
+             :key="question.id"
+             class="question-item-horizontal">
+          <img :src="getQuestionImageUrl(question.path)"
+               :alt="'题目' + question.questionNumber"
+               class="question-image"/>
+          <div class="question-info-right">
+            <div class="question-number">题号: {{ question.questionNumber || question.question_number }}</div>
+            <div class="question-details">
+              <div>ISBN: {{ question.ISBN }}</div>
+              <div>页码: {{ question.pages }}</div>
+              <div>文件名: {{ question.name }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="questionDialogVisible = false">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted, watch, nextTick} from 'vue'
+import {ref, onMounted, watch, nextTick, computed} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {getImageUrl, uploadMergedImage, saveCroppedImage} from '../api'
 import html2canvas from 'html2canvas'
 import axios from 'axios'
 import {columns} from "element-plus/es/components/table-v2/src/common";
+import {ElMessage} from 'element-plus'
 
 
 const startX = ref(0);
@@ -90,6 +116,10 @@ const startY = ref(0);
 const drawing = ref(false);
 const route = useRoute()
 const router = useRouter()
+// 添加缺失的响应式变量
+const questionList = ref([])
+const questionDialogVisible = ref(false)
+
 //  goBack 方法
 const goBack = () => {
   router.back()
@@ -332,17 +362,7 @@ const loadAllDetectionBoxes = async (ids) => {
 
   for (let i = 0; i < ids.length; i++) {
     const imageId = ids[i]
-    const imageInfoRes = await fetch(`http://localhost:8080/api/pdf-pages/images/${imageId}`);
-    const imageInfo = await imageInfoRes.json();
-    // 获取 objectDetection 的值
-    const objectDetectionValue = imageInfo.objectDetection;
-    console.log("objectDetection:", objectDetectionValue);  // 这将输出: 1
-    if (objectDetectionValue==0){
-      await loadDetectionBoxesForImage(i, imageId)
-    }else {
-      console.log(` isbn为：${imageInfo.isbn} 的第 ${imageInfo.bookPage} 未进行目标检测`);
-    }
-
+    await loadDetectionBoxesForImage(i, imageId)
   }
 }
 
@@ -389,8 +409,6 @@ const loadDetectionBoxesForImage = async (imageIndex, imageId) => {
     console.error(`加载图片 ${imageId} 的检测坐标失败`, error);
   }
 };
-
-
 
 // 读取JSON文件内容
 const readTxtFile = async (filePath) => {
@@ -670,13 +688,14 @@ const confirmCrop = async () => {
 
     const pageData = await pageRes.json();
     const isbn = pageData.isbn;
+    const pages = pageData.book_page;
     Aisbn = isbn;
     if (!isbn) {
       alert('ISBN not found in page data');
       return;
     }
 
-    const questionDir = `D:/pdf/${isbn}/question/page${parseInt(imageIndex) + 1}`;
+    const questionDir = `D:\\pdf\\${isbn}\\question\\${pages}`;
 
     try {
       await fetch(`http://localhost:8080/api/pdf-pages/create-dir?dir=${encodeURIComponent(questionDir)}`, {
@@ -720,12 +739,32 @@ const confirmCrop = async () => {
             toDelete.set(parseInt(imageIndex), new Set());
           }
           toDelete.get(parseInt(imageIndex)).add(item.boxIndex);
+
+          // 在这里添加保存到数据库的逻辑
+          // 构造 question 目录下的路径
+          const questionPath = `D:\\pdf\\${isbn}\\question\\${pages}\\${item.orderInPage}.png`;
+          const payload = {
+            ISBN: isbn,
+            name: item.orderInPage.toString(),
+            pages:pages,
+            question_number: item.orderInPage,
+            path: questionPath  // 使用 question 目录下的完整路径
+          };
+          const resp = await fetch('http://localhost:8080/api/pdf-pages/view-question', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error('保存到数据库失败:', text);
+          }
         }
       } else if (item.type === 'merged') {
         // 延迟处理合并图，添加到 Promise 数组中
         const srcPath = item.imagePath; // 或 item.path，视数据结构而定
         const destPath = `${questionDir}/${item.orderInPage}.png`;
-
+        
         mergeCopyPromises.push(
             fetch("http://localhost:8080/api/pdf-pages/copy-file", {
               method: 'POST',
@@ -737,7 +776,29 @@ const confirmCrop = async () => {
                   throw new Error(`复制合并图失败：${text}`);
                 });
               }
-              return res.json(); // 可选，用于后续处理
+              // 在这里添加保存到数据库的逻辑
+              // 构造 question 目录下的路径
+              const questionPath = `D:\\pdf\\${isbn}\\question\\${pages}\\${item.orderInPage}.png`;
+              const payload = {
+                ISBN: isbn,
+                pages: pages,
+                name: item.orderInPage.toString(),
+                question_number: item.orderInPage,
+                path: questionPath  // 使用 question 目录下的完整路径
+              };
+              return fetch('http://localhost:8080/api/pdf-pages/view-question', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+            }).then(res => {
+              if (!res.ok) {
+                return res.text().then(text => {
+                  throw new Error(`合并图信息保存数据库失败: ${text}`);
+                });
+              }
+              // 不再尝试解析 JSON
+              return Promise.resolve();
             })
         );
       }
@@ -770,16 +831,25 @@ const confirmCrop = async () => {
 
   forceUpdate();
 
-  // ✅ 清理合并图和选中框（注意顺序）
+  // 清理合并图和选中框（注意顺序）
   mergedBoxes.value = [];
-
-  // ✅ 在所有复制完成后才删除 zc 文件夹
-  await fetch(`http://localhost:8080/api/pdf-pages/clear-temp-merged?isbn=${Aisbn}`, {
-    method: 'DELETE'
-  });
-
   selectedBoxes.value = [];
+
+  // 在所有复制完成后才删除 zc 文件夹
+  if (Aisbn) {
+    try {
+      await fetch(`http://localhost:8080/api/pdf-pages/clear-temp-merged?isbn=${Aisbn}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      console.error('删除临时文件夹失败:', err);
+      // 继续执行，不影响主流程
+    }
+  }
+
   alert('所有图片已按顺序保存');
+
+
 };
 
   const uploadCroppedImage = async (imageDataUrl) => {
@@ -1038,6 +1108,40 @@ const mergeSelectedBoxes = async () => {
     forceUpdate();
   };
 
+// 计算属性：根据 question_number 排序后的题目列表
+const sortedQuestions = computed(() => {
+  return [...questionList.value].sort((a, b) => {
+    // 兼容两种可能的字段名
+    const aNum = a.questionNumber || a.question_number || 0;
+    const bNum = b.questionNumber || b.question_number || 0;
+    return aNum - bNum;
+  });
+});
+
+// 查看题目方法
+const showQuestions = async (doc) => {
+  try {
+    // 提取数字部分
+    const pageNumber = doc.bookPage.replace(/[^\d]/g, '');
+    const response = await fetch(`http://localhost:8080/api/pdf-pages/by-page?isbn=${doc.isbn}&page=${pageNumber}`)
+    if (!response.ok) {
+      throw new Error('获取题目失败')
+    }
+    const data = await response.json()
+    questionList.value = data
+    questionDialogVisible.value = true
+  } catch (error) {
+    console.error('获取题目失败:', error)
+    ElMessage.error('获取题目失败')
+  }
+}
+
+// 添加获取题目图片URL的方法
+const getQuestionImageUrl = (path) => {
+  if (!path) return '';
+  const encodedPath = encodeURIComponent(path);
+  return `http://localhost:8080/api/files/image?path=${encodedPath}`;
+};
 
 </script>
 
@@ -1101,11 +1205,12 @@ img {
 
 .resize-handle {
   position: absolute;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background-color: blue;
   z-index: 10;
-  cursor: nwse-resize;
+  border-radius: 50%; /* 圆形更易点击 */
+  transform: translateZ(0); /* 启用硬件加速 */
 }
 
 .resize-top-left {
@@ -1170,5 +1275,81 @@ img {
   z-index: 10;
   border-radius: 50%; /* 圆形更易点击 */
   transform: translateZ(0); /* 启用硬件加速 */
+}
+
+.question-number {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  text-align: center;
+  margin-bottom: 8px;
+  padding: 4px;
+  background: #e8e8e8;
+  border-radius: 4px;
+}
+
+.question-details {
+  font-size: 14px;
+  color: #666;
+  display: grid;
+  gap: 4px;
+}
+
+.question-details > div {
+  padding: 2px 0;
+}
+
+/* 新增：竖向题目列表样式 */
+.questions-container-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.question-item-horizontal {
+  display: flex;
+  align-items: center;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 15px;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.question-image {
+  max-width: 300px;
+  height: auto;
+  margin-right: 20px;
+  border-radius: 4px;
+}
+
+.question-info-right {
+  display: flex;
+  gap: 10px;
+}
+
+.question-info-right .question-number {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 0;
+  padding: 8px 12px;
+  background: #f0f8ff;
+  border-radius: 4px;
+  border-left: 4px solid #4a90e2;
+}
+
+.question-info-right .question-details {
+  font-size: 14px;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.question-info-right .question-details > div {
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
 }
 </style>
