@@ -6,7 +6,6 @@ import PdfPages from '../views/PdfPages.vue'
 import PdfSplit from '../views/PdfSplit.vue'
 import Home from "../views/Home.vue"
 import Placeholder1 from '../views/Placeholder1.vue'
-import Placeholder2 from '../views/Placeholder2.vue'
 import QuestionPreview from '../views/QuestionPreview.vue'
 
 const routes = [
@@ -23,11 +22,6 @@ const routes = [
     path: '/placeholder1',
     name: 'Placeholder1',
     component: Placeholder1
-  },
-  {
-    path: '/placeholder2',
-    name: 'Placeholder2',
-    component: Placeholder2
   },
   {
     path: '/question-preview',

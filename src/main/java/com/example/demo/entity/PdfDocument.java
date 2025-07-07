@@ -40,6 +40,8 @@ public class PdfDocument {
     @Column
     private long pages;
 
+    @Column
+    private String grade;
 
     public PdfDocument() {
     }
@@ -145,5 +147,13 @@ public class PdfDocument {
 
     public void setPages(long pages) {
         this.pages = pages;
+    }
+
+    public String getGrade() {
+        return grade;
+    }
+
+    public void setGrade(String grade) {
+        this.grade = grade;
     }
 }

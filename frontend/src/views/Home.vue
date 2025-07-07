@@ -55,6 +55,12 @@
                 />
               </el-form-item>
             </el-col>
+
+            <el-col :span="8">
+              <el-form-item label="年级">
+                <el-input v-model="filters.grade" placeholder="请输入年级" clearable />
+              </el-form-item>
+            </el-col>
           </el-row>
 
           <el-row justify="end">
@@ -99,6 +105,7 @@
               <th>书籍页码</th>
               <th>书籍路径</th>
               <th>ISBN码</th>
+              <th>年级</th>
               <th>检测路径</th>
               <th>是否切割</th>
               <th>上传时间</th>
@@ -120,6 +127,7 @@
               <td>{{ doc.pages }}</td>
               <td>{{ doc.file_path }}</td>          <!-- 书籍路径 -->
               <td>{{ doc.isbn }}</td>
+              <td>{{ doc.grade }}</td>
               <td>{{ doc.slicing_path }}</td>       <!-- 检测路径 -->
               <td :data-status="doc.slicing">
                 {{ doc.slicing === 1 ? '未切割' : '已切割' }}
@@ -141,14 +149,14 @@
           <!-- 分页组件 -->
           <div class="pagination" style="margin-top: 20px; display: flex; justify-content: flex-end;">
             <el-pagination
-              v-model:current-page="currentPage"
-              :page-size="pageSize"
-              :total="total"
-              layout="total, prev, pager, next, jumper"
-              :page-sizes="[15]"
-              :pager-count="11"
-              @current-change="handleCurrentChange"
-              background
+                v-model:current-page="currentPage"
+                :page-size="pageSize"
+                :total="total"
+                layout="prev, pager, next, jumper, ->, total"
+                :page-sizes="[10]"
+                :pager-count="11"
+                @current-change="handleCurrentChange"
+                background
             />
           </div>
         </div>
@@ -165,6 +173,9 @@
         </el-form-item>
         <el-form-item label="ISBN 码">
           <el-input v-model="form.isbn" />
+        </el-form-item>
+        <el-form-item label="年级">
+          <el-input v-model="form.grade" />
         </el-form-item>
         <el-form-item label="PDF 文件">
           <el-upload
@@ -235,11 +246,12 @@ const form = ref({
   subject: '',
   fileName: '',
   isbn: '',
+  grade: '',
   file:null
 })
 
 const currentPage = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(10)
 const total = ref(0)
 
 const pagedDocuments = computed(() => {
@@ -255,7 +267,8 @@ const resetFilters = () => {
     pages: '',
     isbn: '',
     slicing: '',
-    uploadTime: []
+    uploadTime: [],
+    grade: ''
   };
   currentPage.value = 1;
 };
@@ -318,6 +331,13 @@ const applyFilters = () => {
     }
   }
 
+  // 年级过滤
+  if (filters.value.grade) {
+    filtered = filtered.filter(doc =>
+      doc.grade?.toLowerCase().includes(filters.value.grade.toLowerCase())
+    )
+  }
+
   filteredDocuments.value = filtered
   currentPage.value = 1 // 回到第一页
 }
@@ -334,6 +354,7 @@ const submitUpload = async () => {
   formData.append('subject', form.value.subject)
   formData.append('fileName', form.value.fileName)
   formData.append('isbn', form.value.isbn)
+  formData.append('grade', form.value.grade)
   formData.append('file', form.value.file)
 
   try {
@@ -518,7 +539,8 @@ const filters = ref({
   pages: '',
   isbn: '',
   slicing: '', // '1' 表示未切割, '0' 表示已切割
-  uploadTime: [] // [startDate, endDate]
+  uploadTime: [], // [startDate, endDate]
+  grade: ''
 });
 </script>
 
@@ -534,113 +556,164 @@ const filters = ref({
 
 .welcome-card {
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  flex: 1;
+  max-width: 1400px;
+  margin: 0 auto 40px auto;
   background-color: #fff;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
+  padding-bottom: 24px;
 }
 
 .card-header {
   width: 100%;
   text-align: center;
   background-color: #84aee8;
-  padding: 10px;
+  padding: 18px 0 12px 0;
+  border-radius: 16px 16px 0 0;
+}
+
+.card-header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 2rem;
+  letter-spacing: 2px;
 }
 
 .card-content {
   flex: 1;
-  padding: 20px;
-  overflow-y: auto;
+  padding: 32px 32px 0 32px;
+  overflow-x: auto;
+}
+
+.filter-section {
+  margin-bottom: 32px;
+  background-color: #f9f9f9;
+  padding: 24px 32px 8px 32px;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
 }
 
 .action-section {
-  text-align: right;
-  margin-top: 40px;
+  margin: 32px 0 24px 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  justify-content: flex-end;
   align-items: center;
 }
 
-
-
 .button-group {
   display: flex;
-  gap: 16px;
+  gap: 32px;
   width: 100%;
   justify-content: center;
+  margin-bottom: 8px;
 }
 
-
-
+.document-list {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
 
 .document-table {
-  table-layout: fixed; /* 添加这一行 */
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 16px;
+  background: #fff;
 }
 
 .document-table th,
 .document-table td {
-  width: 80px;
-  border: 2px solid #ddd;
-  padding: 8px;
+  padding: 14px 10px;
   text-align: center;
+  font-size: 15px;
 }
 
 .document-table th {
   background-color: #4a90e2;
   color: #fff;
+  font-weight: 500;
+  border-top: 1px solid #e0e0e0;
 }
 
 .document-table td {
-  vertical-align: middle;
+  border-bottom: 1px solid #e0e0e0;
+  color: #333;
+}
+
+.document-table td:nth-child(7),
+.document-table td:nth-child(8),
+.document-table td:nth-child(9),
+.document-table td:nth-child(10),
+.document-table td:nth-child(11) {
+  font-size: 14px;
+}
+
+.document-table td:nth-child(6),
+.document-table td:nth-child(7) {
+  max-width: 180px;
+  word-break: break-all;
+}
+
+.document-table td:nth-child(8) {
+  font-weight: bold;
+  color: #2d8cf0;
+}
+
+.document-table td:nth-child(9) {
+  font-weight: bold;
+  color: #e67e22;
+}
+
+.document-table td:nth-child(10) {
+  font-weight: bold;
+  color: #27ae60;
+}
+
+.document-table td:nth-child(11) {
+  font-weight: bold;
+  color: #c0392b;
+}
+
+.document-table th,
+.document-table td {
+  min-width: 80px;
+}
+
+.pagination {
+  margin-top: 32px;
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 16px;
+  background: #fff;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  min-height: 64px;
+  align-items: center;
 }
 
 
-/* 调整表格列宽 - 使用更具体的选择器 */
-.document-table thead th:nth-child(1),
-.document-table tbody td:nth-child(1) {
-  width: 4% !important;  /* 进一步缩小选择列宽度 */
-  min-width: 70px;       /* 设置最小宽度 */
-  text-align: center;
-}
-
-.document-table thead th:nth-child(2),
-.document-table tbody td:nth-child(2) {
-  width: 8% !important;
-}
-
-.document-table thead th:nth-child(3),
-.document-table tbody td:nth-child(3),
-.document-table thead th:nth-child(4),
-.document-table tbody td:nth-child(4),
-.document-table thead th:nth-child(5),
-.document-table tbody td:nth-child(5),
-.document-table thead th:nth-child(10),
-.document-table tbody td:nth-child(10),
-.document-table thead th:nth-child(7),
-.document-table tbody td:nth-child(7),
-.document-table thead th:nth-child(8),
-.document-table tbody td:nth-child(8),
-.document-table thead th:nth-child(9),
-.document-table tbody td:nth-child(9) {
-  width: 10% !important;
-}
-
-.document-table thead th:nth-child(6),
-.document-table tbody td:nth-child(6) {
-  width: 20% !important;
-}
-
-
-.document-table thead th:nth-child(8),
-.document-table tbody td:nth-child(8) {
-  width: 20% !important;
+@media (max-width: 900px) {
+  .welcome-card {
+    max-width: 98vw;
+    padding: 0 2vw;
+  }
+  .card-content {
+    padding: 12px 2vw 0 2vw;
+  }
+  .filter-section {
+    padding: 12px 2vw 8px 2vw;
+  }
+  .document-list {
+    padding: 0.5rem;
+  }
+  .document-table th, .document-table td {
+    font-size: 13px;
+    padding: 8px 4px;
+  }
 }
 
 .split-button-disabled {
@@ -649,7 +722,6 @@ const filters = ref({
   cursor: not-allowed;
   opacity: 0.7;
 }
-
 
 /* 表头单选按钮样式 */
 .radio-header {
@@ -677,17 +749,6 @@ const filters = ref({
   text-align: center;
 }
 
-.filter-section {
-  margin-bottom: 20px;
-  background-color: #f9f9f9;
-  padding: 16px;
-  border-radius: 8px;
-}
-
-.el-form-item__content {
-  width: 100%;
-}
-
 .splitting-overlay {
   position: fixed;
   z-index: 3000;
@@ -705,5 +766,16 @@ const filters = ref({
   border-radius: 12px;
   box-shadow: 0 2px 16px rgba(0,0,0,0.15);
   font-weight: bold;
+}
+.pagination {
+  margin-top: 32px;
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 16px;
+  background: #fff;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  min-height: 64px;
+  align-items: center;
 }
 </style>

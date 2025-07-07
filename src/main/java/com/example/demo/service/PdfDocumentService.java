@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.entity.PdfDocument;
 import com.example.demo.entity.PdfPage;
 import com.example.demo.repository.PdfDocumentRepository;
+import com.example.demo.utils.OssPathUtils;
 import com.example.demo.utils.PdfUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -33,38 +34,36 @@ public class PdfDocumentService {
 
     String baseDir = "D:"+File.separator+"pdf";
 
+    @Autowired
+    private OssPathUtils ossPathUtils;
+    @Autowired
+    private OssService ossService;
+
     public PdfDocument saveAnotherDocument(PdfDocument document, MultipartFile file) throws IOException {
-        // 保存到数据库
+        // 保存到数据库，先生成ID
         PdfDocument savedDoc = pdfDocumentRepository.save(document);
 
-        // 构建文件夹路径 D:\pdf\{id}
-        String baseDir = "D:/pdf/" + savedDoc.getId();
-        File dir = new File(baseDir);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
+        // 构建OSS路径 pdf/{isbn}/{fileName}.pdf
+        String ossPath = ossPathUtils.buildPagePath(savedDoc.getISBN(), savedDoc.getFileName() + ".pdf");
 
-        // 重命名文件为书籍名称.pdf
-        String fileName = savedDoc.getFileName() + ".pdf";
-        String targetPath = baseDir + "/" + fileName;
+        // 将MultipartFile保存为临时文件
+        File tempFile = File.createTempFile(savedDoc.getFileName(), ".pdf");
+        file.transferTo(tempFile);
 
-        // 保存文件
-        File dest = new File(targetPath);
-        file.transferTo(dest);
+        // 上传到OSS
+        String ossUrl = ossService.uploadFile(tempFile.getAbsolutePath(), ossPath);
+        tempFile.delete();
 
-        // 更新数据库中的文件路径
-        savedDoc.setFilePath(targetPath);
+        // 更新数据库中的文件路径为OSS路径
+        savedDoc.setFilePath(ossUrl);
         return pdfDocumentRepository.save(savedDoc);
     }
-
-
 
     @Autowired
     private FileStorageService fileStorageService;
 
     @Autowired
     private PdfPageService pdfPageService;
-
 
     public List<PdfDocument> getAllDocuments() {
         return pdfDocumentRepository.findAll();
@@ -78,7 +77,6 @@ public class PdfDocumentService {
         return Optional.ofNullable(pdfDocumentRepository.findByFileName(fileName));
     }
 
-
     public List<PdfDocument> searchByISBN(String ISBN) {
         return pdfDocumentRepository.findByISBN(ISBN);
     }
@@ -86,7 +84,6 @@ public class PdfDocumentService {
     public List<PdfDocument> searchByUploadTimeRange(LocalDateTime startDate, LocalDateTime endDate) {
         return pdfDocumentRepository.findByUploadTimeBetween(startDate, endDate);
     }
-
 
     public boolean existsByFileName(String fileName) {
         return pdfDocumentRepository.existsByFileName(fileName);
@@ -99,42 +96,25 @@ public class PdfDocumentService {
             throw new RuntimeException("File with this name already exists");
         }
 
-        // 2. 构建目标路径 D:\pdf\{id}，使用文档 ID 命名文件夹
-        String documentId = document.getISBN(); // 假设文档已生成 ID
-        String dirs = baseDir+File.separator+ documentId;
-        File dir = new File(dirs);
+        // 2. 构建OSS路径 pdf/{isbn}/{fileName}.pdf
+        String ossPath = ossPathUtils.buildPDFPath(document.getISBN(), document.getFileName() + ".pdf");
 
-        if (!dir.exists()) {
-            boolean created = dir.mkdirs();
-            if (!created) {
-                throw new IOException("Failed to create directory: " + dir.getAbsolutePath());
-            }
-        }
+        // 3. 将MultipartFile保存为临时文件
+        File tempFile = File.createTempFile(document.getFileName(), ".pdf");
+        file.transferTo(tempFile);
 
-        // 3. 使用书籍名称作为文件名
-        String safeFileName = document.getFileName() + ".pdf";
-        String targetPath = dirs + File.separator + safeFileName;
-
-
-        // 4. 保存文件到本地
-        File dest = new File(targetPath);
-        file.transferTo(dest);
+        // 4. 上传到OSS
+        String ossUrl = ossService.uploadFile(tempFile.getAbsolutePath(), ossPath);
+        tempFile.delete();
 
         // 5. 设置文档属性
-        document.setFileName(safeFileName);      // 设置文件名为书籍名称.pdf
-        document.setFilePath(dirs);        // 设置文件路径为 D:\pdf\{id}\书籍名称.pdf
+        document.setFileName(document.getFileName() + ".pdf");      // 设置文件名为书籍名称.pdf
+        document.setFilePath(ossUrl);        // 设置文件路径为OSS路径
         document.setUploadTime(LocalDateTime.now());
 
         // 6. 保存文档到数据库
         return pdfDocumentRepository.save(document);
     }
-
-
-
-
-
-
-
 
     @Transactional
     public void deleteDocument(Long id) throws Exception {
@@ -145,9 +125,6 @@ public class PdfDocumentService {
             pdfDocumentRepository.deleteById(id);
         }
     }
-
-
-
 
     @Transactional
     public PdfDocument updateDocument(Long id, PdfDocument document) {
@@ -161,7 +138,6 @@ public class PdfDocumentService {
     public Optional<PdfDocument> findByIdAndFileName(Long id, String fileName) {
         return pdfDocumentRepository.findByIdAndFileName(id, fileName);
     }
-
 
     @Transactional
     public void updateById(Long id, PdfDocument updatedFields) {

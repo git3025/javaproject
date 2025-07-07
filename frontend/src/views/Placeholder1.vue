@@ -28,6 +28,12 @@
             </el-col>
 
             <el-col :span="8">
+              <el-form-item label="年级">
+                <el-input v-model="filters.grade" placeholder="请输入年级" clearable />
+              </el-form-item>
+            </el-col>
+
+            <el-col :span="8">
               <el-form-item label="书籍页码">
                 <el-input v-model="filters.book_page" placeholder="请输入书籍页码" clearable />
               </el-form-item>
@@ -64,6 +70,7 @@
               <th>ISBN码</th>
               <th>书籍名称</th>
               <th>学科名称</th>
+              <th>年级</th>
               <th>书籍页码</th>
               <th>书籍路径</th>
               <th>是否调用目标检测</th>
@@ -79,9 +86,10 @@
               <td>{{ doc.isbn }}</td>
               <td>{{ doc.book_name }}</td>
               <td>{{ doc.subject }}</td>
+              <td>{{ doc.grade }}</td>
               <td>{{ doc.book_page }}</td>
               <td>
-                <img :src="getImageUrl(doc.id)" style="width: 100px;" @error="handleImageError" />
+                <img :src="getImageUrl(doc.id)" style="width: 100px;" @error="handleImageError" @mousedown="startDrawing(doc.id, $event)" @mousemove="drawBox(doc.id, $event)" @mouseup="endDrawing(doc.id, $event)" @mouseleave="endDrawing(doc.id, $event)" />
               </td>
               <td :data-status="doc.object_detection">
                 {{ doc.object_detection === 1 ? '未调用' : '已调用' }}
@@ -99,7 +107,7 @@
                 :page-size="pageSize"
                 :total="total"
                 layout="prev, pager, next, jumper, ->, total"
-                :page-sizes="[15]"
+                :page-sizes="[10]"
                 :pager-count="11"
                 @current-change="handleCurrentChange"
                 background
@@ -143,18 +151,56 @@
                 </div>
               </template>
             </el-table-column>
+            <!-- 操作列 -->
+            <el-table-column label="操作" width="120" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" size="small" @click="showDetailDialog(row)">
+                  题目详情
+                </el-button>
+                <div v-if="waitingDialogVisible" class="mini-waiting-dialog">
+                  <div class="mini-waiting-content">
+                    正在分析题目，请耐心等待...
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </div>
     </div>
     <template #footer>
-    <span class="dialog-footer">
-      <el-button @click="saveQuestions">保存</el-button>
-      <el-button @click="questionDialogVisible = false">关闭</el-button>
-    </span>
+        <span class="dialog-footer">
+            <el-button @click="saveQuestions">保存</el-button>
+            <el-button @click="questionDialogVisible = false">关闭</el-button>
+        </span>
+    </template>
+  </el-dialog>
+  <!-- 查看题目详情弹窗 -->
+  <el-dialog title="题目详情" v-model="detailDialogVisible" width="60%" :before-close="closeDetailDialog">
+    <div v-if="currentDetailQuestion">
+      <h3>题号：{{ currentDetailQuestion.question_number }}</h3>
+      <div style="margin-bottom: 10px;">
+        <img :src="getQuestionImageUrl(currentDetailQuestion.path)" alt="题目图片" style="max-width: 100%; border-radius: 4px;" />
+      </div>
+      <div style="margin-bottom: 10px; border-bottom: 1px solid #eee;">
+        <div><b>图片：</b> {{ currentDetailQuestion.file || currentDetailQuestion.pages }}</div>
+        <div><b>年级：</b> {{ currentDetailQuestion.grade }}</div>
+        <div><b>学科：</b> {{ currentDetailQuestion.subject }}</div>
+      </div>
+      <div>
+        <div><b>题目：</b> {{ currentDetailQuestion.topic }}</div>
+        <div><b>答案：</b> {{ currentDetailQuestion.answer }}</div>
+        <div><b>解析：</b> {{ currentDetailQuestion.points || currentDetailQuestion.analysis }}</div>
+        <div><b>知识点：</b> {{ currentDetailQuestion.analysis || currentDetailQuestion.knowledge }}</div>
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="closeDetailDialog">关闭</el-button>
     </template>
   </el-dialog>
 </template>
+
+
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
@@ -162,15 +208,90 @@ import api from '../api'
 import { getImageUrl } from '../api'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus';
+import {Loading} from "@element-plus/icons-vue";
+const waitingDialogVisible = ref(false)
 const filters = ref({
   isbn: '',
   book_name: '',
   subject: '',
   book_page: '',
-  object_detection: ''
+  object_detection: '',
+  grade: ''
 });
 
 const filteredDocuments = ref([]); // 存储筛选后的文档列表
+
+const detailDialogVisible = ref(false);
+const currentDetailQuestion = ref(null);
+
+const currentDocForQuestions = ref(null);
+
+function showQuestions(doc) {
+  currentDocForQuestions.value = doc;
+  try {
+    // 提取数字部分
+    const pageNumber = doc.book_page.replace(/[^0-9]/g, '');
+    fetch(`http://localhost:8080/api/pdf-pages/by-page?isbn=${doc.isbn}&page=${pageNumber}`)
+      .then(response => response.json())
+      .then(data => {
+        data.sort((a, b) => a.question_number - b.question_number);
+        questionList.value = data;
+        questionDialogVisible.value = true;
+      })
+      .catch(error => {
+        console.error('获取题目失败:', error);
+        ElMessage.error('获取题目失败');
+      });
+  } catch (error) {
+    console.error('获取题目失败:', error);
+    ElMessage.error('获取题目失败');
+  }
+}
+
+function refreshQuestionList() {
+  if (currentDocForQuestions.value) {
+    showQuestions(currentDocForQuestions.value);
+  }
+}
+
+function showDetailDialog(question) {
+  waitingDialogVisible.value = true;
+  fetch('http://localhost:8080/api/pdf-pages/workflow-detail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: question.id })
+  })
+  // 超时Promise
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('调用超时，请稍后重试')), 180000); // 180000ms = 3分钟
+  });
+
+  // fetchPromise
+  const fetchPromise = fetch('http://localhost:8080/api/pdf-pages/workflow-detail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: question.id })
+  }).then(res => res.json());
+
+  Promise.race([fetchPromise, timeoutPromise])
+    .then(res => res.json())
+    .then(() => {
+      // 不弹出详情弹窗，直接刷新题目列表
+    })
+    .catch((err) => {
+      // 超时或异常
+      ElMessage.error(err.message || '调用失败');
+    })
+    .finally(() => {
+      waitingDialogVisible.value = false;
+      refreshQuestionList();
+    });
+}
+
+function closeDetailDialog() {
+  detailDialogVisible.value = false;
+  currentDetailQuestion.value = null;
+}
 // 弹窗控制
 const questionDialogVisible = ref(false)
 const questionList = ref([])
@@ -193,7 +314,7 @@ let startX = ref(0)
 let startY = ref(0)
 
 const currentPage = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(10)
 const total = ref(0)
 
 const pagedDocuments = computed(() => {
@@ -208,7 +329,8 @@ const resetFilters = () => {
     book_name: '',
     subject: '',
     book_page: '',
-    object_detection: ''
+    object_detection: '',
+    grade: ''
   }
   applyFilters()
 }
@@ -265,6 +387,12 @@ const applyFilters = () => {
     )
   }
 
+  if (filters.value.grade) {
+    filtered = filtered.filter(doc =>
+      doc.grade?.toLowerCase().includes(filters.value.grade.toLowerCase())
+    )
+  }
+
   filteredDocuments.value = filtered
   currentPage.value = 1 // 回到第一页
 }
@@ -297,7 +425,7 @@ const toggleDrawingMode = () => {
 }
 
 // 开始绘制矩形
-const startDrawing = (id) => {
+const startDrawing = (id, event) => {
   if (!isDrawingEnabled.value) return
 
   const wrapper = imageWrappers.value[id]
@@ -398,70 +526,16 @@ const navigateToQuestionPage = () => {
   })
 }
 
-// 查看题目方法
-const showQuestions = async (doc) => {
-  try {
-    // 提取数字部分
-    const pageNumber = doc.book_page.replace(/[^\d]/g, '');
-    const response = await fetch(`http://localhost:8080/api/pdf-pages/by-page?isbn=${doc.isbn}&page=${pageNumber}`)
-    if (!response.ok) {
-      throw new Error('获取题目失败')
-    }
-    const data = await response.json();
-
-    // 确保按 question_number 排序（即使后端已排序，前端也可再次确认）
-    data.sort((a, b) => a.question_number - b.question_number);
-
-    questionList.value = data
-    questionDialogVisible.value = true
-  } catch (error) {
-    console.error('获取题目失败:', error)
-    ElMessage.error('获取题目失败')
-  }
-}
-
 // 获取题目图片URL
 const getQuestionImageUrl = (path) => {
-  return `http://localhost:8080/api/pdf-pages/question-image?path=${encodeURIComponent(path)}`
-}
+  if (!path) return '';
+  return path; // 直接用 OSS 路径
+};
 
 // 关闭弹窗
 const handleClose = () => {
   questionDialogVisible.value = false
   questionList.value = []
-}
-
-// 保存题目数据
-const saveQuestions = async () => {
-  try {
-    for (const question of questionList.value) {
-      if (!question.id || question.id === 'null') {
-        ElMessage.error('题目ID缺失，无法保存');
-        continue;
-      }
-      console.log('即将保存的题目对象：', question);
-      const response = await fetch('http://localhost:8080/api/pdf-pages/update-question', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: question.id,
-          question_number: question.question_number,
-          answer: question.answer || '',
-          analysis: question.analysis || '',
-          knowledge: question.knowledge || '',
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('保存失败')
-      }
-    }
-
-    ElMessage.success('保存成功')
-  } catch (error) {
-    console.error('保存题目失败:', error)
-    ElMessage.error('保存失败')
-  }
 }
 
 const formatDate = (dateStr) => {
@@ -479,28 +553,39 @@ onMounted(() => {
 
 <style scoped>
 .placeholder-container {
-  padding: 60px;
-  width: 1650px;
-  height: 100%;
-  background-color: #eaeff6;
-  display: flex;
-  flex-direction: column;
-}
+    padding: 60px;
+    width: 1650px;
+    height: 100%;
+    background-color: #eaeff6;
+    display: flex;
+    flex-direction: column;
+  }
 
 .welcome-card {
-  width: 100%; /* 占据大部分视口宽度 */
-  max-width: 1400px; /* 最大宽度限制 */
-  margin: 0 auto; /* 自动左右边距实现居中 */
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto 40px auto;
   background-color: #fff;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
+  padding-bottom: 24px;
 }
 
 .card-header {
+  width: 100%;
   text-align: center;
   background-color: #84aee8;
-  padding: 10px;
+  padding: 18px 0 12px 0;
+  border-radius: 16px 16px 0 0;
+}
+
+.card-header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 2rem;
+  letter-spacing: 2px;
 }
 
 .card-content {
@@ -560,25 +645,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.question-info-right {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.question-number {
-  font-size: 14px;
-  font-weight: bold;
-  color: #333;
-  margin: 0;
-  padding: 4px 8px;
-  background: #f0f8ff;
-  border-radius: 4px;
-  border-left: 4px solid #4a90e2;
-  align-self: flex-start;
-  width: fit-content;
-}
 
 .filter-section {
   margin-bottom: 20px;
@@ -587,9 +653,6 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-.el-form-item__content {
-  width: 100%;
-}
 
 .vertical-fields {
   display: flex;
@@ -606,5 +669,26 @@ onMounted(() => {
   font-size: 12px;
   font-weight: bold;
   margin-bottom: 5px;
+}
+.mini-waiting-dialog {
+  position: fixed;
+  z-index: 99999;
+  left: 0; top: 0; width: 100vw; height: 100vh;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+}
+.mini-waiting-content {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+  padding: 32px 48px;
+  font-size: 20px;
+  color: #333;
+  font-weight: bold;
+  border: none;
+  pointer-events: all;
 }
 </style>

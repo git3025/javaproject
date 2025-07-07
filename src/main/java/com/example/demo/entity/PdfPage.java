@@ -25,6 +25,9 @@ public class PdfPage {
     @Column
     private String bookPage;
 
+    @Column
+    private String grade;
+
     public Long getId() {
         return id;
     }
@@ -73,10 +76,6 @@ public class PdfPage {
         this.bookPath = bookPath;
     }
 
-
-    @Column
-    private String bookPath;
-
     public Integer getObjectDetection() {
         return objectDetection;
     }
@@ -87,5 +86,16 @@ public class PdfPage {
 
     @Column
     private Integer objectDetection;
+
+    public String getGrade() {
+        return grade;
+    }
+
+    public void setGrade(String grade) {
+        this.grade = grade;
+    }
+
+    @Column
+    private String bookPath;
 
 } 

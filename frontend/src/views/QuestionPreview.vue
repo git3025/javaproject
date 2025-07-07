@@ -26,6 +26,7 @@
             @mousemove="drawBox(index)"
             @mouseup="endDrawing(index)"
             @mouseleave="endDrawing(index)"
+            crossorigin="anonymous"
         />
         <!-- 当前绘制的矩形 -->
         <div
@@ -74,46 +75,26 @@
       </template>
     </el-dialog>
     <!-- 查看题目弹窗 -->
-    <el-dialog title="题目列表" v-model="questionDialogVisible" width="60%" :before-close="handleClose">
-      <div class="questions-container-vertical">
+    <el-dialog title="题目列表" v-model="questionDialogVisible" width="80%" :before-close="handleClose">
+      <div class="questions-container">
         <div v-for="question in sortedQuestions"
              :key="question.id"
-             class="question-item-horizontal">
+             class="question-item">
           <img :src="getQuestionImageUrl(question.path)"
                :alt="'题目' + question.questionNumber"
-               class="question-image"/>
-          <div class="question-table-container">
-            <el-table :data="[question]" border style="width: 100%">
-              <el-table-column prop="question_number" label="题号" width="80">
-                <template #default="scope">
-                  <el-input v-model="scope.row.question_number" size="small" />
-                </template>
-              </el-table-column>
-              <el-table-column label="题目信息" width="780">
-                <template #default="scope">
-                  <div class="vertical-fields">
-                    <div class="field-item">
-                      <label>答案：</label>
-                      <el-input v-model="scope.row.answer" size="small" type="textarea" :rows="2" placeholder="请输入答案" />
-                    </div>
-                    <div class="field-item">
-                      <label>解析：</label>
-                      <el-input v-model="scope.row.analysis" size="small" type="textarea" :rows="2" placeholder="请输入解析" />
-                    </div>
-                    <div class="field-item">
-                      <label>知识点：</label>
-                      <el-input v-model="scope.row.knowledge" size="small" type="textarea" :rows="2" placeholder="请输入知识点" />
-                    </div>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
+               style="max-width: 100%; height: auto;"/>
+          <div class="question-info">
+            <div class="question-number">题号: {{ question.questionNumber || question.question_number }}</div>
+            <div class="question-details">
+              <div>ISBN: {{ question.ISBN }}</div>
+              <div>页码: {{ question.pages }}</div>
+              <div>文件名: {{ question.name }}</div>
+            </div>
           </div>
         </div>
       </div>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="saveQuestions">保存</el-button>
           <el-button @click="questionDialogVisible = false">关闭</el-button>
         </span>
       </template>
@@ -129,6 +110,8 @@ import html2canvas from 'html2canvas'
 import axios from 'axios'
 import {columns} from "element-plus/es/components/table-v2/src/common";
 import {ElMessage} from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
+import { ElLoading } from 'element-plus'
 
 
 const startX = ref(0);
@@ -407,7 +390,8 @@ const loadDetectionBoxesForImage = async (imageIndex, imageId) => {
   try {
     const imageInfoRes = await fetch(`http://localhost:8080/api/pdf-pages/images/${imageId}`);
     const imageInfo = await imageInfoRes.json();
-    const imagePath = `D:/pdf/${imageInfo.isbn}/page/${imageInfo.bookPage}.png`;
+    const imagePath = imageInfo.bookPath;
+   //const imagePath = `D:/pdf/${imageInfo.isbn}/page/${imageInfo.bookPage}.png`;
     const jsonPath = imagePath.replace('/page/', '/labelstxt/').replace('.png', '.json');
     const jsonContent = await readTxtFile(jsonPath);
     if (!jsonContent) return;
@@ -579,7 +563,6 @@ const endDrawing = (index) => {
   console.log(`[End Drawing] Index: ${index}, Box:`, {x, y, width, height})
 }
 
-
 // 确认切割按钮方法
 const confirmCrop = async () => {
   if (selectedBoxes.value.length === 0 && mergedBoxes.value.length === 0) {
@@ -709,21 +692,15 @@ const confirmCrop = async () => {
     const pageData = await pageRes.json();
     const isbn = pageData.isbn;
     const pages = pageData.book_page;
+    const subject = pageData.subject; // 获取学科信息
     Aisbn = isbn;
     if (!isbn) {
       alert('ISBN not found in page data');
       return;
     }
-
-    const questionDir = `D:\\pdf\\${isbn}\\question\\${pages}`;
-
-    try {
-      await fetch(`http://localhost:8080/api/pdf-pages/create-dir?dir=${encodeURIComponent(questionDir)}`, {
-        method: 'POST'
-      });
-    } catch (e) {
-      alert('创建目标目录失败');
-      return;
+    // 获取 OSS 文件路径
+    function buildOssPath(isbn, page, filename) {
+      return `pdf/${isbn}/page/question/${page}/${filename}.png`;
     }
 
     // 处理当前图片的所有区域
@@ -739,13 +716,16 @@ const confirmCrop = async () => {
         const width = Math.round(box.width * scaleX);
         const height = Math.round(box.height * scaleY);
 
+        const filename = `${item.orderInPage}`;
+        const ossPath = buildOssPath(isbn, pages, filename);
         const params = new URLSearchParams({
           x: x.toString(),
           y: y.toString(),
           width: width.toString(),
           height: height.toString(),
           imageId: imageId,
-          order: item.orderInPage.toString()
+          order: item.orderInPage.toString(),
+          ossPath: ossPath
         });
 
         const url = `http://localhost:8080/api/pdf-pages/crop?${params.toString()}`;
@@ -762,13 +742,15 @@ const confirmCrop = async () => {
 
           // 在这里添加保存到数据库的逻辑
           // 构造 question 目录下的路径
-          const questionPath = `D:\\pdf\\${isbn}\\question\\${pages}\\${item.orderInPage}.png`;
+           const ossBase = "https://zdpg.oss-cn-chengdu.aliyuncs.com"; // 统一为指定bucket域名
+           const questionPath = `${ossBase}/pdf/${isbn}/page/question/${pages}/${item.orderInPage}.png`;
           const payload = {
             ISBN: isbn,
             name: item.orderInPage.toString(),
-            pages:pages,
+            pages: pages,
             question_number: item.orderInPage,
-            path: questionPath  // 使用 question 目录下的完整路径
+            path: questionPath,  // 使用 OSS 路径
+            subject: subject     // 添加学科信息
           };
           const resp = await fetch('http://localhost:8080/api/pdf-pages/view-question', {
             method: 'POST',
@@ -783,10 +765,15 @@ const confirmCrop = async () => {
       } else if (item.type === 'merged') {
         // 延迟处理合并图，添加到 Promise 数组中
         const srcPath = item.imagePath; // 或 item.path，视数据结构而定
-        const destPath = `${questionDir}/${item.orderInPage}.png`;
-        
+        const filename = `${item.orderInPage}`;
+        const path = buildOssPath(isbn, pages, filename);
+       // const ossBase = "https://zdpg.oss-cn-chengdu.aliyuncs.com"; // 统一为指定bucket域名
+        const destPath =  `${path}`;
+       // const destPath =  `${ossBase}/${path}`;
+
         mergeCopyPromises.push(
-            fetch("http://localhost:8080/api/pdf-pages/copy-file", {
+            // 1. 先请求后端合并并上传图片
+            fetch("http://localhost:8080/api/pdf-pages/merge-cropped-images", {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ srcPath, destPath })
@@ -798,13 +785,19 @@ const confirmCrop = async () => {
               }
               // 在这里添加保存到数据库的逻辑
               // 构造 question 目录下的路径
-              const questionPath = `D:\\pdf\\${isbn}\\question\\${pages}\\${item.orderInPage}.png`;
+            // const zcPath =item.imagePath;
+              const ossBase = "https://zdpg.oss-cn-chengdu.aliyuncs.com"; // 统一为指定bucket域名
+              //onst questionPath = `${ossBase}/pdf/${isbn}/page/question/${pages}/${item.orderInPage}.png`;
+              const filename = `${item.orderInPage}`;
+              const ossPath = buildOssPath(isbn, pages, filename);
+              const fullPath = `${ossBase}/${path}`;
               const payload = {
                 ISBN: isbn,
                 pages: pages,
                 name: item.orderInPage.toString(),
                 question_number: item.orderInPage,
-                path: questionPath  // 使用 question 目录下的完整路径
+                path: fullPath,  // 使用 OSS 路径
+                subject: subject // 添加学科信息
               };
               return fetch('http://localhost:8080/api/pdf-pages/view-question', {
                 method: 'POST',
@@ -817,7 +810,6 @@ const confirmCrop = async () => {
                   throw new Error(`合并图信息保存数据库失败: ${text}`);
                 });
               }
-              // 不再尝试解析 JSON
               return Promise.resolve();
             })
         );
@@ -869,7 +861,6 @@ const confirmCrop = async () => {
 
   alert('所有图片已按顺序保存');
 
-
 };
 
   const uploadCroppedImage = async (imageDataUrl) => {
@@ -887,7 +878,7 @@ const confirmCrop = async () => {
         baseName: selectedBoxes.value[0].boxIndex, // 使用第一个框选区域的 boxIndex 作为基础名
         selectedImageId: imageId,
         pageIndex: currentPageIndex + 1,
-        order: order // 新增字段
+        order: order
       })
     });
 
@@ -919,11 +910,9 @@ const mergeSelectedBoxes = async () => {
   }
 
   const imageDataUrls = [];
-
   for (const {imageIndex, boxIndex} of selectedBoxes.value) {
     const wrapper = imageWrappers.value[imageIndex];
     const box = selections.value[imageIndex][boxIndex];
-
     const target = wrapper.querySelector('img');
 
     const canvas = await html2canvas(target, {
@@ -936,6 +925,7 @@ const mergeSelectedBoxes = async () => {
     });
 
     const imageDataUrl = canvas.toDataURL('image/png');
+    console.log('截图 base64 长度', imageDataUrl.length, imageDataUrl.slice(0, 100));
     imageDataUrls.push(imageDataUrl);
   }
 
@@ -943,18 +933,17 @@ const mergeSelectedBoxes = async () => {
   const ids = route.query.ids.split(',');
   const imageIndex = selectedBoxes.value[0].imageIndex;
   const imageId = ids[imageIndex];
-
+  const order = selectedBoxes.value[0].boxIndex;
+  const question_number = selectedBoxes.value[0].question_number || selectedBoxes.value[0].orderInPage || selectedBoxes.value[0].boxIndex;
+  const name = question_number + '.png';
   const response = await fetch("http://localhost:8080/api/pdf-pages/merge-cropped-images", {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       images: imageDataUrls,
-      baseName: selectedBoxes.value[0].boxIndex,
       selectedImageId: imageId,
-      pageIndex: imageIndex + 1,
-      order: selectedBoxes.value[0].boxIndex // 使用第一个选中框的 boxIndex 作为 order
+      order: order,
+      name: name
     })
   });
 
@@ -1138,20 +1127,28 @@ const sortedQuestions = computed(() => {
   });
 });
 
-
-// 添加获取题目图片URL的方法
-const getQuestionImageUrl = (path) => {
-  if (!path) return '';
-  const encodedPath = encodeURIComponent(path);
-  return `http://localhost:8080/api/files/image?path=${encodedPath}`;
-};
-
-// 关闭弹窗
-const handleClose = () => {
-  questionDialogVisible.value = false
-  questionList.value = []
+// 查看题目方法
+const showQuestions = async (doc) => {
+  try {
+    // 提取数字部分
+    const pageNumber = doc.bookPage.replace(/[^\d]/g, '');
+    const response = await fetch(`http://localhost:8080/api/pdf-pages/by-page?isbn=${doc.isbn}&page=${pageNumber}`)
+    if (!response.ok) {
+      throw new Error('获取题目失败')
+    }
+    const data = await response.json()
+    questionList.value = data
+    questionDialogVisible.value = true
+  } catch (error) {
+    console.error('获取题目失败:', error)
+    ElMessage.error('获取题目失败')
+  }
 }
 
+// 添加获取题目图片URL的方法
+const getQuestionImageUrl = (path) => path || '';
+
+const waitingDialogVisible = ref(false); // 已存在于你的文件中
 
 </script>
 
@@ -1287,85 +1284,48 @@ img {
   transform: translateZ(0); /* 启用硬件加速 */
 }
 
-
-.question-details > div {
-  padding: 2px 0;
-}
-
-/* 新增：竖向题目列表样式 */
-.questions-container-vertical {
-  display: flex;
-  flex-direction: column;
+/* 添加题目列表样式 */
+.questions-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
   padding: 20px;
 }
 
-.question-item-horizontal {
-  display: flex;
-  align-items: flex-start;
-  border: 1px solid #eee;
+.question-item {
+  border: 1px solid #ddd;
   border-radius: 8px;
   padding: 15px;
   background: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.question-image {
-  max-width: 300px;
-  height: auto;
-  margin-right: 20px;
+.question-info {
+  margin-top: 10px;
+  padding: 8px;
+  background: #f5f5f5;
   border-radius: 4px;
 }
 
-.question-table-container {
-  flex: 1;
-  min-width: 0;
-}
-
-.question-info-right {
-  display: flex;
-  gap: 10px;
-  max-width: 120px;
-}
-
-.question-info-right .question-number {
+.question-number {
   font-size: 18px;
   font-weight: bold;
   color: #333;
-  margin: 0;
-  padding: 4px 8px;
-  background: #f0f8ff;
+  text-align: center;
+  margin-bottom: 8px;
+  padding: 4px;
+  background: #e8e8e8;
   border-radius: 4px;
-  border-left: 4px solid #4a90e2;
 }
 
-.question-info-right .question-details {
+.question-details {
   font-size: 14px;
   color: #666;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 4px;
 }
 
-.question-info-right .question-details > div {
-  padding: 4px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.vertical-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.field-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.field-item label {
-  font-size: 12px;
-  font-weight: bold;
-  margin-bottom: 5px;
+.question-details > div {
+  padding: 2px 0;
 }
 </style>

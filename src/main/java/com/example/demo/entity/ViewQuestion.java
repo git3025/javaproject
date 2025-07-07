@@ -30,6 +30,13 @@ public class ViewQuestion {
     private String analysis;
     private String knowledge;
 
+    // 新增字段
+    private String file;
+    private String grade;
+    private String subject;
+    private Integer points;
+    private String topic;
+
     // Getters and Setters
 
     public String getISBN() {
@@ -103,5 +110,46 @@ public class ViewQuestion {
 
     public void setKnowledge(String knowledge) {
         this.knowledge = knowledge;
+    }
+
+    // 新增字段的getter和setter
+    public String getFile() {
+        return file;
+    }
+
+    public void setFile(String file) {
+        this.file = file;
+    }
+
+    public String getGrade() {
+        return grade;
+    }
+
+    public void setGrade(String grade) {
+        this.grade = grade;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
+    }
+
+    public Integer getPoints() {
+        return points;
+    }
+
+    public void setPoints(Integer points) {
+        this.points = points;
+    }
+
+    public String getTopic() {
+        return topic;
+    }
+
+    public void setTopic(String topic) {
+        this.topic = topic;
     }
 }

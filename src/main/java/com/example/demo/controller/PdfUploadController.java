@@ -2,8 +2,10 @@ package com.example.demo.controller;
 
 import com.example.demo.entity.PdfDocument;
 import com.example.demo.entity.PdfPage;
+import com.example.demo.service.OssService;
 import com.example.demo.service.PdfDocumentService;
 import com.example.demo.service.PdfPageService; // 导入 PdfPageService
+import com.example.demo.utils.OssPathUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +35,12 @@ public class PdfUploadController {
     @Autowired
     private PdfPageService pdfPageService; // 注入 PdfPageService
 
+    @Autowired
+    private OssPathUtils ossPathUtils;
+
+    @Autowired
+    private OssService ossService;
+
     @GetMapping
     public ResponseEntity<List<PdfDocument>> getAllDocuments() {
         List<PdfDocument> documents = pdfDocumentService.getAllDocuments();
@@ -44,12 +52,14 @@ public class PdfUploadController {
             @RequestParam("fileName") String fileName,
             @RequestParam("subject") String subject,
             @RequestParam("isbn") String isbn,
+            @RequestParam("grade") String grade,
             @RequestParam("file") MultipartFile file) {
         try {
             PdfDocument document = new PdfDocument();
             document.setFileName(fileName);
             document.setSubject(subject);
             document.setISBN(isbn);
+            document.setGrade(grade);
 
             PdfDocument saved = pdfDocumentService.saveDocument(document, file);
             return ResponseEntity.ok(saved);
@@ -68,49 +78,58 @@ public class PdfUploadController {
 
             PdfDocument document = documentOpt.get();
 
-
             // 判断是否已经切割过
             if (document.getSlicing() == 0) {
                 return ResponseEntity.badRequest().body("该文件已切割，不允许重复切割");
             }
 
-            String pdfPath = document.getFilePath(); // 获取 PDF 文件路径
-            String outputFolder = pdfPath + File.separator + "page"; // 输出路径为 page 子目录
-            document.setSlicingPath(outputFolder);
-            // 创建输出目录（如果不存在）
-            File dir = new File(outputFolder);
-            if (!dir.exists()) {
-                dir.mkdirs();
+            // 1. 先从 OSS 下载 PDF 到本地临时文件
+            String ossUrl = document.getFilePath();
+            File tempPdf = File.createTempFile("pdf_download_", ".pdf");
+            try (java.io.InputStream in = new java.net.URL(ossUrl).openStream()) {
+                java.nio.file.Files.copy(in, tempPdf.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
 
-            // 使用 Apache PDFBox 将 PDF 转换为图片
-            PDDocument pdDocument = PDDocument.load(new File(pdfPath + File.separator + document.getFileName()));
-            PDFRenderer renderer = new PDFRenderer(pdDocument);
+            // 2. 用 PDFBox 处理本地临时文件
+            org.apache.pdfbox.pdmodel.PDDocument pdDocument = org.apache.pdfbox.pdmodel.PDDocument.load(tempPdf);
+            org.apache.pdfbox.rendering.PDFRenderer renderer = new org.apache.pdfbox.rendering.PDFRenderer(pdDocument);
             int pageCount = pdDocument.getNumberOfPages();
 
             for (int i = 0; i < pageCount; i++) {
                 BufferedImage image = renderer.renderImageWithDPI(i, 300); // DPI=300
-                String imagePath = outputFolder + File.separator + "page" + (i + 1) + ".png";
-                ImageIO.write(image, "PNG", new File(imagePath));
-                PdfDocument pdfDoc = new PdfDocument();
+                // 1. 生成临时本地图片
+                File tempFile = File.createTempFile("page" + (i + 1), ".png");
+                ImageIO.write(image, "PNG", tempFile);
+
+                // 2. 构建 OSS 路径
+                String ossPath = ossPathUtils.buildPagePath(document.getISBN(), "page" + (i + 1) + ".png");
+
+                // 3. 上传到 OSS
+                String ossUrlPage = ossService.uploadFile(tempFile.getAbsolutePath(), ossPath);
+
+                // 4. 保存 OSS 路径到数据库
                 PdfPage page = new PdfPage();
                 page.setISBN(document.getISBN());
                 page.setBookName(document.getFileName());
                 page.setSubject(document.getSubject());
                 page.setBookPage("page" + (i + 1));
-
-                page.setBookPath(imagePath);
+                page.setGrade(document.getGrade());
+                page.setBookPath(ossUrlPage); // 这里必须是完整的OSS URL
                 page.setObjectDetection(1); // 默认启用
-                pdfPageService.updatePage(page); // 使用注入的 pdfPageService
+                pdfPageService.updatePage(page);
+
+                // 5. 删除临时文件
+                tempFile.delete();
             }
             pdDocument.close();
+            tempPdf.delete();
 
-            // 更新数据库字段 slicing = 0 表示“已切割”
+            // 更新数据库字段 slicing = 0 表示"已切割"
             document.setSlicing(0);
             document.setPages(pageCount);
             pdfDocumentService.updateDocument(document.getId(), document);
 
-            return ResponseEntity.ok("PDF 已成功转换为图片，保存至：" + outputFolder);
+            return ResponseEntity.ok("PDF 已成功转换为图片，已上传至 OSS");
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
