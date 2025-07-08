@@ -4,7 +4,7 @@ import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router/index'
-import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs' // 特别注意这个路径
 
 const app = createApp(App)
 
@@ -28,5 +28,4 @@ app.use(ElementPlus, {
     }
   }
 })
-
 app.mount('#app')

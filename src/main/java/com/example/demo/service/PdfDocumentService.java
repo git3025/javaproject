@@ -40,7 +40,7 @@ public class PdfDocumentService {
     private OssService ossService;
 
     public PdfDocument saveAnotherDocument(PdfDocument document, MultipartFile file) throws IOException {
-        // 保存到数据库，先生成ID
+        // 保存到数据库
         PdfDocument savedDoc = pdfDocumentRepository.save(document);
 
         // 构建OSS路径 pdf/{isbn}/{fileName}.pdf

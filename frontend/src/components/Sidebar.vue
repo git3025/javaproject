@@ -8,6 +8,9 @@
       <li>
         <router-link :to="{ name: 'Placeholder1' }">书籍图片列表</router-link>
       </li>
+      <li>
+        <router-link :to="{ name: 'knowledgepage' }">知识点总结</router-link>
+      </li>
     </ul>
   </div>
 </template>

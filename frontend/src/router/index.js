@@ -6,6 +6,7 @@ import PdfPages from '../views/PdfPages.vue'
 import PdfSplit from '../views/PdfSplit.vue'
 import Home from "../views/Home.vue"
 import Placeholder1 from '../views/Placeholder1.vue'
+import knowledgepage from '../views/knowledgepage.vue'
 import QuestionPreview from '../views/QuestionPreview.vue'
 
 const routes = [
@@ -22,6 +23,27 @@ const routes = [
     path: '/placeholder1',
     name: 'Placeholder1',
     component: Placeholder1
+  },
+  {
+    path: '/knowledgepage',
+    name: 'knowledgepage',
+    component: knowledgepage
+  },
+  {
+    path: '/generate-questions',
+    name: 'GenerateQuestions',
+    component: () => import('../views/GenerateQuestions.vue'),
+    meta: {
+      title: '自动生成题目合集'
+    }
+  },
+  {
+    path: '/question-detail',
+    name: 'QuestionDetail',
+    component: () => import('../views/QuestionDetail.vue'),
+    meta: {
+      title: '知识点题目详细'
+    }
   },
   {
     path: '/question-preview',

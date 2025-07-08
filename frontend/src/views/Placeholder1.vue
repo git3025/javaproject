@@ -425,7 +425,7 @@ const toggleDrawingMode = () => {
 }
 
 // 开始绘制矩形
-const startDrawing = (id, event) => {
+const startDrawing = (id) => {
   if (!isDrawingEnabled.value) return
 
   const wrapper = imageWrappers.value[id]
